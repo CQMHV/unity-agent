@@ -1811,7 +1811,7 @@ Example: Adding PhysBone to Hair_front_Root → All children (Hair_front_0, Hair
 
 Apply a template based on the bone type:
 ```
-[AddPhysBone('boneName')]
+[AddVRCPhysBone('boneName')]
 [ApplyVRCPhysBoneTemplate('boneName', 'templateName')]
 ```
 
@@ -1861,8 +1861,8 @@ Fine-tune after applying template:
 
 Add colliders to prevent penetration through the body:
 ```
-[AddPhysBoneCollider('Head', 1, 0.08, 0.15)]
-[LinkColliderToPhysBone('Hair_Root', 'Head')]
+[AddVRCPhysBoneCollider('Head', 1, 0.08, 0.15)]
+[LinkVRCColliderToPhysBone('Hair_Root', 'Head')]
 ```
 
 ### Common Collider Placements
@@ -1898,8 +1898,8 @@ If unclear, check existing settings with InspectVRCPhysBone or ask the user.
 ## Notes
 - Add PhysBone to the **root of the chain** (not the tip)
 - Do not add multiple PhysBones to the same bone
-- Use exclusions to exclude unwanted children: [SetPhysBoneExclusions('boneName', 'exclude1,exclude2')]
-- Specify endpoint position: [SetPhysBoneEndpoint('boneName', '0,0.1,0')]
+- Use exclusions to exclude unwanted children: [SetVRCPhysBoneExclusions('boneName', 'exclude1,exclude2')]
+- Specify endpoint position via Configure: [ConfigureVRCPhysBone('boneName', endpointPosition='0,0.1,0')]
 - Performance rank thresholds: See ReadSkill('avatar-optimization')" },
 
             { "batch-operations", @"---

@@ -610,5 +610,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
             return null;
         }
+
+        /// True when the NDMF ParameterInfo API is loadable in the current AppDomain.
+        /// Used by sibling tools to surface a "call ListNDMFParameters next" hint only when meaningful.
+        internal static bool IsNDMFAvailable() => FindAnyType("nadena.dev.ndmf.ParameterInfo") != null;
     }
 }

@@ -164,14 +164,20 @@ namespace AjisaiFlow.UnityAgent.Editor
             { "ConfigureVRCEyeMovement", "目の動きを設定" },
 
             // ── PhysBone ──
-            { "AddPhysBone", "PhysBoneを追加" },
-            { "RemovePhysBone", "PhysBoneを削除" },
+            { "AddVRCPhysBone", "PhysBoneを追加" },
+            { "RemoveVRCPhysBone", "PhysBoneを削除" },
             { "ListVRCPhysBones", "PhysBone一覧" },
             { "InspectVRCPhysBone", "PhysBoneの詳細設定を表示" },
             { "ConfigureVRCPhysBone", "PhysBoneのパラメータを設定" },
             { "ApplyVRCPhysBoneTemplate", "PhysBoneテンプレートを適用" },
-            { "AddPhysBoneCollider", "PhysBoneコライダーを追加" },
-            { "RemovePhysBoneCollider", "PhysBoneコライダーを削除" },
+            { "AddVRCPhysBoneCollider", "PhysBoneコライダーを追加" },
+            { "ListVRCPhysBoneColliders", "PhysBoneコライダー一覧" },
+            { "InspectVRCPhysBoneCollider", "PhysBoneコライダーの詳細を表示" },
+            { "ConfigureVRCPhysBoneCollider", "PhysBoneコライダーを設定" },
+            { "RemoveVRCPhysBoneCollider", "PhysBoneコライダーを削除" },
+            { "LinkVRCColliderToPhysBone", "PhysBoneにコライダーをリンク" },
+            { "UnlinkVRCColliderFromPhysBone", "PhysBoneからコライダーを解除" },
+            { "SetVRCPhysBoneExclusions", "PhysBoneの除外Transformを設定" },
 
             // ── VRC Constraint ──
             { "AddVRCConstraint", "VRC Constraintを追加" },
