@@ -702,6 +702,69 @@ namespace AjisaiFlow.UnityAgent.Editor
         {
             _inputBar?.UpdateProviderName(GetProviderShortName());
             _inputBar?.UpdateModelName(GetActiveModelDisplayName());
+            RefreshApiKeyNotice();
+        }
+
+        /// <summary>
+        /// 現在選択中のプロバイダーが APIキー必須にも関わらず未設定の場合 true。
+        /// </summary>
+        private bool IsActiveProviderApiKeyMissing()
+        {
+            if (_configs == null || !_configs.ContainsKey(_providerType)) return false;
+            var desc = ProviderRegistry.Get(_providerType);
+            var cfg = _configs[_providerType];
+            switch (desc.SettingsKind)
+            {
+                case ProviderSettingsKind.OpenAICompatibleApiKey:
+                case ProviderSettingsKind.ClaudeApi:
+                case ProviderSettingsKind.VertexAI:
+                    return string.IsNullOrWhiteSpace(cfg.ApiKey);
+                case ProviderSettingsKind.Gemini:
+                    if (cfg.GeminiMode == GeminiConnectionMode.Custom) return false;
+                    return string.IsNullOrWhiteSpace(cfg.ApiKey);
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// 各プロバイダーのAPIキー取得ページURL。未提供は null。
+        /// </summary>
+        private static string GetApiKeyUrlForProvider(LLMProviderType type)
+        {
+            switch (type)
+            {
+                case LLMProviderType.Gemini: return "https://aistudio.google.com/apikey";
+                case LLMProviderType.Claude_API: return "https://console.anthropic.com/settings/keys";
+                case LLMProviderType.OpenAI: return "https://platform.openai.com/api-keys";
+                case LLMProviderType.DeepSeek: return "https://platform.deepseek.com/api_keys";
+                case LLMProviderType.Groq: return "https://console.groq.com/keys";
+                case LLMProviderType.xAI_Grok: return "https://console.x.ai";
+                case LLMProviderType.Mistral: return "https://console.mistral.ai/api-keys/";
+                case LLMProviderType.Perplexity: return "https://www.perplexity.ai/settings/api";
+                case LLMProviderType.Vertex_AI: return "https://console.cloud.google.com/apis/credentials";
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// WelcomePanel の APIキー未設定案内バナーをプロバイダー状態に合わせて更新する。
+        /// </summary>
+        private void RefreshApiKeyNotice()
+        {
+            if (_welcomePanel == null) return;
+            if (IsActiveProviderApiKeyMissing())
+            {
+                var desc = ProviderRegistry.Get(_providerType);
+                _welcomePanel.ShowApiKeyNotice(
+                    desc.DisplayName,
+                    GetApiKeyUrlForProvider(_providerType),
+                    () => UnityAgentSettingsWindow.Open());
+            }
+            else
+            {
+                _welcomePanel.HideApiKeyNotice();
+            }
         }
 
         private void UpdateToolbarBadges()
@@ -1243,6 +1306,23 @@ namespace AjisaiFlow.UnityAgent.Editor
         {
             bool hasAttachment = _pendingAttachmentBytes != null;
             if (string.IsNullOrEmpty(_userQuery) && !hasAttachment) return;
+
+            // APIキー必須プロバイダーで未設定なら、案内エントリを表示して送信を中止する。
+            // (AskUser 回答中はそもそも LLM を呼ばないのでスキップ)
+            if (!UserChoiceState.IsPending && IsActiveProviderApiKeyMissing())
+            {
+                var desc = ProviderRegistry.Get(_providerType);
+                var notice = ChatEntry.CreateError(string.Format(
+                    M("APIキーが未設定です。プロバイダー「{0}」を使うには、設定画面の「プロバイダ」タブからAPIキーを登録してください。"),
+                    desc.DisplayName));
+                _chatHistory.Add(notice);
+                _chatPanel?.AppendEntry(notice);
+                _welcomePanel.style.display = DisplayStyle.None;
+                _chatPanel.style.display = DisplayStyle.Flex;
+                _shouldScrollToBottom = true;
+                UnityAgentSettingsWindow.Open();
+                return;
+            }
 
             // MCP Server モードでは LLM を呼ばない。AskUser 回答のみ許可する。
             if (_providerType == LLMProviderType.MCPServer && !UserChoiceState.IsPending)

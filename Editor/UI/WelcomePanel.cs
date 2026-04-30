@@ -11,6 +11,7 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
     {
         readonly MD3Theme _theme;
         VisualElement _updateBanner;
+        VisualElement _apiKeyNotice;
 
         static readonly (string icon, string title, string body, int accent)[] Hints =
         {
@@ -54,6 +55,14 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             _updateBanner.style.maxWidth = 500;
             _updateBanner.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
             Add(_updateBanner);
+
+            // API key notice placeholder
+            _apiKeyNotice = new VisualElement();
+            _apiKeyNotice.style.display = DisplayStyle.None;
+            _apiKeyNotice.style.marginBottom = 8;
+            _apiKeyNotice.style.maxWidth = 500;
+            _apiKeyNotice.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
+            Add(_apiKeyNotice);
 
             // Documentation card
             var docCard = CreateDocCard();
@@ -195,7 +204,7 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             int cardIdx = 0;
             foreach (var child in Children())
             {
-                if (child.name == "welcome-title" || child == _updateBanner) continue;
+                if (child.name == "welcome-title" || child == _updateBanner || child == _apiKeyNotice) continue;
 
                 child.style.opacity = 0f;
                 child.style.translate = new Translate(0, 40);
@@ -229,6 +238,79 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             _updateBanner.style.display = DisplayStyle.Flex;
 
             // TODO: action button for download
+        }
+
+        /// <summary>API キー未設定の案内カードを表示する。</summary>
+        public void ShowApiKeyNotice(string providerDisplayName, string apiKeyUrl, Action onOpenSettings)
+        {
+            _apiKeyNotice.Clear();
+
+            Color bg = _theme.ErrorContainer.a > 0.1f
+                ? _theme.ErrorContainer
+                : new Color(0.45f, 0.18f, 0.20f, 1f);
+            Color fg = _theme.OnErrorContainer.a > 0.1f
+                ? _theme.OnErrorContainer
+                : new Color(1f, 0.92f, 0.92f, 1f);
+            Color accent = _theme.Error.a > 0.1f
+                ? _theme.Error
+                : new Color(0.95f, 0.6f, 0.6f, 1f);
+
+            var card = new MD3Column(gap: MD3Spacing.S);
+            card.Padding(MD3Spacing.M);
+            card.Radius(MD3Radius.L);
+            card.style.backgroundColor = bg;
+            card.style.borderLeftWidth = 4;
+            card.style.borderLeftColor = accent;
+
+            var titleRow = new MD3Row(gap: MD3Spacing.S);
+            titleRow.style.alignItems = Align.Center;
+            var icon = MD3Icon.Create(MD3Icon.Warning, 22f);
+            icon.style.color = accent;
+            titleRow.Add(icon);
+            titleRow.Add(new MD3Text(
+                M("APIキーが未設定です"),
+                MD3TextStyle.TitleSmall, fg));
+            card.Add(titleRow);
+
+            card.Add(new MD3Text(
+                string.Format(
+                    M("選択中のプロバイダー「{0}」を使うには APIキー が必要です。設定画面から登録してください。"),
+                    providerDisplayName),
+                MD3TextStyle.BodySmall, fg));
+
+            var btnRow = new MD3Row(gap: MD3Spacing.S);
+            btnRow.style.flexWrap = Wrap.Wrap;
+
+            var openSettingsBtn = new MD3Button(
+                M("設定を開く"),
+                MD3ButtonStyle.Filled,
+                icon: MD3Icon.Settings,
+                size: MD3ButtonSize.Small);
+            openSettingsBtn.clicked += () => onOpenSettings?.Invoke();
+            btnRow.Add(openSettingsBtn);
+
+            if (!string.IsNullOrEmpty(apiKeyUrl))
+            {
+                var getKeyBtn = new MD3Button(
+                    M("APIキーを取得"),
+                    MD3ButtonStyle.Outlined,
+                    icon: MD3Icon.OpenInNew,
+                    size: MD3ButtonSize.Small);
+                getKeyBtn.clicked += () => Application.OpenURL(apiKeyUrl);
+                btnRow.Add(getKeyBtn);
+            }
+
+            card.Add(btnRow);
+
+            _apiKeyNotice.Add(card);
+            _apiKeyNotice.style.display = DisplayStyle.Flex;
+        }
+
+        /// <summary>API キー未設定の案内カードを隠す。</summary>
+        public void HideApiKeyNotice()
+        {
+            _apiKeyNotice.Clear();
+            _apiKeyNotice.style.display = DisplayStyle.None;
         }
     }
 }
