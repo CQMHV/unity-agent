@@ -442,6 +442,21 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             for (int i = 0; i < sceneRenderers.Length; i++)
                 originalStates[i] = sceneRenderers[i].enabled;
 
+            // Also activate target GameObject and ancestors so the mesh renders even when
+            // the avatar/outfit is currently SetActive(false). Save the GameObject active
+            // states along the chain so we can restore.
+            var ancestorActiveBackup = new List<(GameObject go, bool active)>();
+            Transform t = target.transform;
+            while (t != null)
+            {
+                if (!t.gameObject.activeSelf)
+                {
+                    ancestorActiveBackup.Add((t.gameObject, false));
+                    t.gameObject.SetActive(true);
+                }
+                t = t.parent;
+            }
+
             try
             {
                 // Isolate target (and its descendants) — disable everything else
@@ -515,6 +530,13 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             {
                 for (int j = 0; j < sceneRenderers.Length; j++)
                     sceneRenderers[j].enabled = originalStates[j];
+                // Restore GameObject active states (in reverse order so children get
+                // restored before parents are deactivated — preserves correct hierarchy state)
+                for (int i = ancestorActiveBackup.Count - 1; i >= 0; i--)
+                {
+                    if (ancestorActiveBackup[i].go != null)
+                        ancestorActiveBackup[i].go.SetActive(ancestorActiveBackup[i].active);
+                }
                 foreach (var tex in cellTextures)
                     UnityEngine.Object.DestroyImmediate(tex);
                 UnityEngine.Object.DestroyImmediate(rt);
