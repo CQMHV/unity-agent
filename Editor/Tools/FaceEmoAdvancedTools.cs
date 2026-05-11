@@ -944,12 +944,15 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         public static string SetExpressionPreview(string meshObjectName, string blendShapeData)
             => BlendShapeTools.SetMultipleBlendShapes(meshObjectName, blendShapeData);
 
-        [AgentTool("Focus camera on avatar face and capture expression preview image. " +
+        [AgentTool("Focus SceneView camera on avatar face and capture expression preview image. " +
+            "width/height (default 1024) set render resolution. maxWidth>0 downscales output. " +
+            "format='png' (default) or 'jpg' (smaller via jpgQuality 1-100, default 90). " +
+            "saveToPath: optional explicit save path. " +
             "Returns an image for visual verification. Use after SetExpressionPreview.")]
-        public static string CaptureExpressionPreview(string avatarRootName)
+        public static string CaptureExpressionPreview(string avatarRootName, int width = 1024, int height = 1024, int maxWidth = 0, string format = "png", int jpgQuality = 90, string saveToPath = "")
         {
             BlendShapeTools.FocusOnFace(avatarRootName);
-            return BlendShapeTools.CaptureExpressionPreview(avatarRootName);
+            return BlendShapeTools.CaptureExpressionPreview(avatarRootName, width, height, maxWidth, format, jpgQuality, saveToPath);
         }
 
         [AgentTool("Reset all blend shapes to 0 after expression preview. " +

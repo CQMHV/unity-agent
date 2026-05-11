@@ -83,8 +83,82 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
         }
 
-        [AgentTool("Capture a screenshot of the current SceneView. The image is sent to you for visual inspection. Use this to verify object placement, rotation, and visual appearance.")]
-        public static string CaptureSceneView(int width = 512, int height = 512)
+        // ─── Quality / format options shared by all capture-style tools ───
+        // Encodes a Texture2D with optional downscale + format choice. Returns null on failure.
+        // Caller is responsible for DestroyImmediate-ing the source Texture2D.
+        internal static byte[] EncodeWithOptions(Texture2D tex, int maxWidth, string format, int jpgQuality, out string mime)
+        {
+            mime = "image/png";
+            if (tex == null) return null;
+
+            string fmt = (format ?? "png").Trim().ToLowerInvariant();
+            bool isJpg = fmt == "jpg" || fmt == "jpeg";
+            mime = isJpg ? "image/jpeg" : "image/png";
+            int q = Mathf.Clamp(jpgQuality, 1, 100);
+
+            // Optional bilinear downscale (longer side ≤ maxWidth, preserves aspect)
+            Texture2D resized = null;
+            RenderTexture rt = null;
+            Texture2D toEncode = tex;
+            try
+            {
+                if (maxWidth > 0)
+                {
+                    int longer = Mathf.Max(tex.width, tex.height);
+                    if (longer > maxWidth)
+                    {
+                        float scale = (float)maxWidth / longer;
+                        int dw = Mathf.Max(1, Mathf.RoundToInt(tex.width * scale));
+                        int dh = Mathf.Max(1, Mathf.RoundToInt(tex.height * scale));
+                        rt = RenderTexture.GetTemporary(dw, dh, 0, RenderTextureFormat.ARGB32);
+                        rt.filterMode = FilterMode.Bilinear;
+                        var prevActive = RenderTexture.active;
+                        Graphics.Blit(tex, rt);
+                        RenderTexture.active = rt;
+                        resized = new Texture2D(dw, dh, TextureFormat.RGBA32, false);
+                        resized.ReadPixels(new Rect(0, 0, dw, dh), 0, 0);
+                        resized.Apply();
+                        RenderTexture.active = prevActive;
+                        toEncode = resized;
+                    }
+                }
+                return isJpg ? toEncode.EncodeToJPG(q) : toEncode.EncodeToPNG();
+            }
+            finally
+            {
+                if (resized != null) UnityEngine.Object.DestroyImmediate(resized);
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+            }
+        }
+
+        // Saves bytes to an explicit path (creates dirs as needed). Silent on failure.
+        // Returns true if a save was attempted (path non-empty) regardless of success.
+        internal static bool TrySaveToPath(byte[] bytes, string saveToPath, out string error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(saveToPath) || bytes == null || bytes.Length == 0) return false;
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(saveToPath);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllBytes(saveToPath, bytes);
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                error = ex.Message;
+                return true;
+            }
+        }
+
+        [AgentTool("Take a screenshot of the current SceneView. " +
+            "width/height (default 1024) set the render resolution. " +
+            "maxWidth>0 downscales the longer side (preserves aspect). " +
+            "format='png' (lossless, default) or 'jpg' (smaller via jpgQuality 1-100, default 90). " +
+            "saveToPath: optional explicit save path in addition to the auto-attached image. " +
+            "Use this to verify object placement, rotation, and visual appearance.")]
+        public static string CaptureSceneView(int width = 1024, int height = 1024, int maxWidth = 0, string format = "png", int jpgQuality = 90, string saveToPath = "")
         {
             var sceneView = SceneView.lastActiveSceneView;
             if (sceneView == null)
@@ -110,19 +184,27 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             RenderTexture.active = oldActive;
             UnityEngine.Object.DestroyImmediate(rt);
 
-            byte[] pngBytes = tex.EncodeToPNG();
+            byte[] outBytes = EncodeWithOptions(tex, maxWidth, format, jpgQuality, out string mime);
             UnityEngine.Object.DestroyImmediate(tex);
 
-            if (pngBytes == null || pngBytes.Length == 0)
-                return "Error: Failed to capture SceneView image.";
+            if (outBytes == null || outBytes.Length == 0)
+                return "Error: Failed to encode SceneView image.";
 
-            SetPendingImage(pngBytes, "image/png");
+            SetPendingImage(outBytes, mime);
+            string saveMsg = "";
+            if (TrySaveToPath(outBytes, saveToPath, out string saveErr))
+                saveMsg = saveErr != null ? $" (saveToPath failed: {saveErr})" : $" Saved to '{saveToPath}'.";
 
-            return $"Success: Captured SceneView screenshot ({width}x{height}, {pngBytes.Length} bytes). The image has been attached for your review.";
+            return $"Success: Captured SceneView screenshot ({width}x{height}, {outBytes.Length} bytes, {(mime == "image/jpeg" ? "jpg" : "png")}). The image has been attached for your review.{saveMsg}";
         }
 
-        [AgentTool("Capture a target from multiple angles and compose into a grid image. angles: comma-separated from front,back,left,right,top,45left,45right. Default: front,left,right,back. cellSize is the resolution per cell.")]
-        public static string CaptureMultiAngle(string targetName, string angles = "front,left,right,back", int cellSize = 256)
+        [AgentTool("Capture a target from multiple angles and compose into a grid image. " +
+            "angles: comma-separated from front,back,left,right,top,45left,45right. Default: front,left,right,back. " +
+            "cellSize is the per-cell resolution (default 384). " +
+            "maxWidth>0 downscales the final composite (preserves aspect). " +
+            "format='png' (lossless, default) or 'jpg' (smaller via jpgQuality 1-100, default 90). " +
+            "saveToPath: optional explicit save path.")]
+        public static string CaptureMultiAngle(string targetName, string angles = "front,left,right,back", int cellSize = 384, int maxWidth = 0, string format = "png", int jpgQuality = 90, string saveToPath = "")
         {
             var target = FindGO(targetName);
             if (target == null) return $"Error: GameObject '{targetName}' not found.";
@@ -249,16 +331,19 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 }
 
                 composite.Apply();
-                byte[] pngBytes = composite.EncodeToPNG();
+                byte[] outBytes = EncodeWithOptions(composite, maxWidth, format, jpgQuality, out string mime);
                 UnityEngine.Object.DestroyImmediate(composite);
 
-                if (pngBytes == null || pngBytes.Length == 0)
+                if (outBytes == null || outBytes.Length == 0)
                     return "Error: Failed to encode composite image.";
 
-                SetPendingImage(pngBytes, "image/png");
+                SetPendingImage(outBytes, mime);
+                string saveMsg = "";
+                if (TrySaveToPath(outBytes, saveToPath, out string saveErr))
+                    saveMsg = saveErr != null ? $" (saveToPath failed: {saveErr})" : $" Saved to '{saveToPath}'.";
 
                 string labelInfo = string.Join(", ", capturedLabels.Select((l, i) => $"[{i}]={l}"));
-                return $"Success: Captured {cellTextures.Count} angles of '{targetName}' in a {cols}x{rows} grid ({gridW}x{gridH}px). Layout (left-to-right, top-to-bottom): {labelInfo}. The image has been attached for your review.";
+                return $"Success: Captured {cellTextures.Count} angles of '{targetName}' in a {cols}x{rows} grid ({gridW}x{gridH}px, {outBytes.Length} bytes, {(mime == "image/jpeg" ? "jpg" : "png")}). Layout (left-to-right, top-to-bottom): {labelInfo}. The image has been attached for your review.{saveMsg}";
             }
             finally
             {
@@ -270,8 +355,13 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
         }
 
-        [AgentTool("Scan all meshes under an avatar and capture each one ISOLATED (other meshes hidden) into a labeled grid image. Use this BEFORE modifying any mesh to visually identify what each GameObject actually is. Returns image + text mapping.")]
-        public static string ScanAvatarMeshes(string avatarRootName, int cellSize = 192)
+        [AgentTool("Scan all meshes under an avatar and capture each one ISOLATED (other meshes hidden) into a labeled grid image. " +
+            "cellSize is the per-mesh cell resolution (default 256). " +
+            "maxWidth>0 downscales the final composite. " +
+            "format='png' (lossless, default) or 'jpg' (smaller via jpgQuality 1-100, default 90). " +
+            "saveToPath: optional explicit save path. " +
+            "Use this BEFORE modifying any mesh to visually identify what each GameObject actually is. Returns image + text mapping.")]
+        public static string ScanAvatarMeshes(string avatarRootName, int cellSize = 256, int maxWidth = 0, string format = "png", int jpgQuality = 90, string saveToPath = "")
         {
             var avatarRoot = FindGO(avatarRootName);
             if (avatarRoot == null)
@@ -404,20 +494,24 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 }
 
                 composite.Apply();
-                byte[] pngBytes = composite.EncodeToPNG();
+                byte[] outBytes = EncodeWithOptions(composite, maxWidth, format, jpgQuality, out string mime);
                 UnityEngine.Object.DestroyImmediate(composite);
 
-                if (pngBytes == null || pngBytes.Length == 0)
+                if (outBytes == null || outBytes.Length == 0)
                     return "Error: Failed to encode grid image.";
 
-                SetPendingImage(pngBytes, "image/png");
+                SetPendingImage(outBytes, mime);
+                string saveMsg = "";
+                if (TrySaveToPath(outBytes, saveToPath, out string saveErr))
+                    saveMsg = saveErr != null ? $" (saveToPath failed: {saveErr})" : $" Saved to '{saveToPath}'.";
 
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine($"Scanned {count} meshes under '{avatarRootName}'.");
-                sb.AppendLine($"Grid {cols}x{rows} ({gridW}x{gridH}px), left→right, top→bottom:");
+                sb.AppendLine($"Grid {cols}x{rows} ({gridW}x{gridH}px, {outBytes.Length} bytes, {(mime == "image/jpeg" ? "jpg" : "png")}), left→right, top→bottom:");
                 foreach (var label in labels)
                     sb.AppendLine($"  {label}");
                 sb.Append("Image attached. Identify each mesh visually before proceeding.");
+                if (!string.IsNullOrEmpty(saveMsg)) sb.Append(saveMsg);
                 return sb.ToString();
             }
             finally

@@ -538,7 +538,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         }
 
         /// <summary>Capture face close-up from Scene view. Called internally by FaceEmo CaptureExpressionPreview.</summary>
-        public static string CaptureExpressionPreview(string avatarRootName, int width = 512, int height = 512)
+        public static string CaptureExpressionPreview(string avatarRootName, int width = 1024, int height = 1024, int maxWidth = 0, string format = "png", int jpgQuality = 90, string saveToPath = "")
         {
             // Focus on face first
             string focusResult = FocusOnFace(avatarRootName);
@@ -551,8 +551,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             // Small delay for Scene to update
             SceneView.RepaintAll();
 
-            // Capture
-            return SceneViewTools.CaptureSceneView(width, height);
+            // Capture (forwards all encoding options)
+            return SceneViewTools.CaptureSceneView(width, height, maxWidth, format, jpgQuality, saveToPath);
         }
 
         // ─── Helpers ───

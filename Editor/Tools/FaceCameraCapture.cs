@@ -12,16 +12,17 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
     {
         private const float DefaultFov = 30f;
         private const float DefaultDistanceMultiplier = 4.5f;
-        private const int DefaultResolution = 512;
+        private const int DefaultResolution = 1024;
 
-        [AgentTool("アバターの顔を専用カメラ (固定 FOV 30°/解像度 512×512) でキャプチャする。" +
-            "SceneView 非依存なので状態に左右されず、表情プレビューの判断材料として安定。" +
-            "CaptureExpressionPreview の代替。Head ボーンが必須 (humanoid only)。" +
+        [AgentTool("アバターの顔を専用カメラ (固定 FOV 30°) でキャプチャする。" +
+            "SceneView 非依存なので状態に左右されず、表情プレビューの判断材料として安定。Head ボーンが必須 (humanoid only)。" +
+            "width/height (デフォルト 1024) で render 解像度。maxWidth>0 で最終出力をダウンスケール。" +
+            "format='png' (デフォルト) または 'jpg' (jpgQuality 1-100, デフォルト 90)。saveToPath で追加保存。" +
             "値域 0-100 の BlendShape 設定後に呼び出すのが標準フロー。",
             Author = "ajisaiflow",
             Category = "FaceProfile",
             Risk = ToolRisk.Safe)]
-        public static string CaptureFacePreview(string avatarRootName, int width = DefaultResolution, int height = DefaultResolution)
+        public static string CaptureFacePreview(string avatarRootName, int width = DefaultResolution, int height = DefaultResolution, int maxWidth = 0, string format = "png", int jpgQuality = 90, string saveToPath = "")
         {
             if (string.IsNullOrWhiteSpace(avatarRootName))
                 return "Error: avatarRootName is empty.";
@@ -81,15 +82,19 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                     tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
                     tex.Apply();
 
-                    byte[] pngBytes = tex.EncodeToPNG();
+                    byte[] outBytes = SceneViewTools.EncodeWithOptions(tex, maxWidth, format, jpgQuality, out string mime);
                     UnityEngine.Object.DestroyImmediate(tex);
 
-                    if (pngBytes == null || pngBytes.Length == 0)
-                        return "Error: Failed to encode face preview as PNG.";
+                    if (outBytes == null || outBytes.Length == 0)
+                        return "Error: Failed to encode face preview.";
 
-                    SceneViewTools.SetPendingImage(pngBytes, "image/png");
-                    return $"Success: Captured face preview ({width}x{height}, {pngBytes.Length} bytes). " +
-                           $"Center=({center.x:F2},{center.y:F2},{center.z:F2}) distance={distance:F2}. Image attached.";
+                    SceneViewTools.SetPendingImage(outBytes, mime);
+                    string saveMsg = "";
+                    if (SceneViewTools.TrySaveToPath(outBytes, saveToPath, out string saveErr))
+                        saveMsg = saveErr != null ? $" (saveToPath failed: {saveErr})" : $" Saved to '{saveToPath}'.";
+
+                    return $"Success: Captured face preview ({width}x{height}, {outBytes.Length} bytes, {(mime == "image/jpeg" ? "jpg" : "png")}). " +
+                           $"Center=({center.x:F2},{center.y:F2},{center.z:F2}) distance={distance:F2}. Image attached.{saveMsg}";
                 }
                 finally
                 {
