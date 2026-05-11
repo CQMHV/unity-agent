@@ -14,6 +14,42 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         public static byte[] PendingImageBytes { get; private set; }
         public static string PendingImageMimeType { get; private set; }
 
+        // Compute a tight world-space AABB for any Renderer.
+        // For SkinnedMeshRenderer, prefer sharedMesh.bounds (mesh-local) transformed
+        // by transform.localToWorldMatrix — avoids the runtime-inflated bounds that
+        // SMR uses for skinning safety. For other renderers, use Renderer.bounds.
+        private static Bounds ComputeTightBounds(Renderer r)
+        {
+            if (r is SkinnedMeshRenderer smr && smr.sharedMesh != null)
+            {
+                var localBounds = smr.sharedMesh.bounds;
+                var corners = new Vector3[8];
+                Vector3 min = localBounds.min, max = localBounds.max;
+                corners[0] = new Vector3(min.x, min.y, min.z);
+                corners[1] = new Vector3(max.x, min.y, min.z);
+                corners[2] = new Vector3(min.x, max.y, min.z);
+                corners[3] = new Vector3(max.x, max.y, min.z);
+                corners[4] = new Vector3(min.x, min.y, max.z);
+                corners[5] = new Vector3(max.x, min.y, max.z);
+                corners[6] = new Vector3(min.x, max.y, max.z);
+                corners[7] = new Vector3(max.x, max.y, max.z);
+
+                var matrix = smr.transform.localToWorldMatrix;
+                Vector3 worldMin = matrix.MultiplyPoint(corners[0]);
+                Vector3 worldMax = worldMin;
+                for (int i = 1; i < 8; i++)
+                {
+                    Vector3 wp = matrix.MultiplyPoint(corners[i]);
+                    worldMin = Vector3.Min(worldMin, wp);
+                    worldMax = Vector3.Max(worldMax, wp);
+                }
+                var b = new Bounds();
+                b.SetMinMax(worldMin, worldMax);
+                return b;
+            }
+            return r.bounds;
+        }
+
         public static void ClearPendingImage()
         {
             PendingImageBytes = null;
@@ -91,13 +127,24 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             var target = FindGO(targetName);
             if (target == null) return $"Error: GameObject '{targetName}' not found.";
 
-            // Calculate bounds from all renderers
-            var renderers = target.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0) return $"Error: No renderers found under '{targetName}'.";
+            // Calculate bounds from ACTIVE+ENABLED renderers only (inactive clothing
+            // variants etc. would otherwise inflate bounds and push the camera too far away).
+            var allRenderers = target.GetComponentsInChildren<Renderer>(true);
+            var renderers = allRenderers.Where(r => r != null && r.enabled && r.gameObject.activeInHierarchy).ToArray();
+            if (renderers.Length == 0)
+            {
+                // Fallback: if nothing is active, use all renderers (better than failing)
+                renderers = allRenderers;
+                if (renderers.Length == 0)
+                    return $"Error: No renderers found under '{targetName}'.";
+            }
 
-            var bounds = renderers[0].bounds;
+            // For SkinnedMeshRenderer, .bounds is the runtime-skinned bounding box which
+            // includes animation extension and is often inflated. Use sharedMesh.bounds
+            // transformed to world space for tighter framing.
+            Bounds bounds = ComputeTightBounds(renderers[0]);
             for (int i = 1; i < renderers.Length; i++)
-                bounds.Encapsulate(renderers[i].bounds);
+                bounds.Encapsulate(ComputeTightBounds(renderers[i]));
 
             Vector3 center = bounds.center;
             float maxExtent = Mathf.Max(bounds.extents.x, bounds.extents.y, bounds.extents.z);
