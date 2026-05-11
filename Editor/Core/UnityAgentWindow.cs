@@ -866,6 +866,114 @@ namespace AjisaiFlow.UnityAgent.Editor
             AgentLogger.Info(LogTag.UI, $"Agent initialized: provider={_providerType}, model={cfg.ModelName}, maxContext={_agent.MaxContextTokens}");
         }
 
+        // ═══════════════════════════════════════════════════════
+        //  TestRunner UI hijack support
+        //  ─────────────────────────────────────────────────────
+        //  Lets TestRunnerCore temporarily replace _agent with a
+        //  test core so AI responses stream into the live UI.
+        //  Backup is restored when the test session is discarded.
+        // ═══════════════════════════════════════════════════════
+
+        private UnityAgentCore _backupAgent;
+        private List<ChatEntry> _backupChatHistory;
+        private string _backupInputBarText;
+        private string _backupProviderName;
+        private string _backupModelName;
+        private bool _isHijackedForTest;
+
+        /// <summary>
+        /// Replaces the live _agent with a test core, backing up current state.
+        /// UI displays the test session's messages live. Restore via RestoreFromTestHijack().
+        /// Re-entrant: a second hijack implicitly restores the previous one first.
+        /// </summary>
+        internal void HijackForTest(UnityAgentCore testCore, string sessionLabel)
+        {
+            if (testCore == null) throw new ArgumentNullException(nameof(testCore));
+
+            if (_isHijackedForTest)
+            {
+                // Already hijacked — implicit restore first so we keep the original
+                // (non-test) agent/history as the eventual restoration target.
+                RestoreFromTestHijack();
+            }
+            if (_agent == null) InitializeAgent();
+
+            // Backup live state
+            _backupAgent = _agent;
+            _backupChatHistory = new List<ChatEntry>(_chatHistory ?? new List<ChatEntry>());
+            _backupInputBarText = _inputBar?.GetText() ?? "";
+            _backupProviderName = GetProviderShortName();
+            _backupModelName = GetActiveModelDisplayName();
+
+            // Swap to test core
+            _agent = testCore;
+            _chatHistory = new List<ChatEntry>();
+            _isHijackedForTest = true;
+
+            // Refresh UI to reflect the empty test history
+            _chatPanel?.RebuildFromHistory(_chatHistory);
+            if (_chatPanel != null) _chatPanel.style.display = DisplayStyle.Flex;
+            if (_welcomePanel != null) _welcomePanel.style.display = DisplayStyle.None;
+            _inputBar?.ClearText();
+            _inputBar?.UpdateProviderName($"[TEST] {sessionLabel}");
+            _inputBar?.UpdateModelName("");
+            Repaint();
+        }
+
+        /// <summary>
+        /// Restores the original agent and chat history. Safe to call multiple times.
+        /// </summary>
+        internal void RestoreFromTestHijack()
+        {
+            if (!_isHijackedForTest) return;
+            if (_backupAgent != null)
+            {
+                _agent = _backupAgent;
+                _chatHistory = _backupChatHistory ?? new List<ChatEntry>();
+                _chatPanel?.RebuildFromHistory(_chatHistory);
+                if (_chatPanel != null)
+                    _chatPanel.style.display = _chatHistory.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                if (_welcomePanel != null)
+                    _welcomePanel.style.display = _chatHistory.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                if (_backupInputBarText != null) _inputBar?.SetText(_backupInputBarText);
+                if (_backupProviderName != null) _inputBar?.UpdateProviderName(_backupProviderName);
+                if (_backupModelName != null) _inputBar?.UpdateModelName(_backupModelName);
+                _backupAgent = null;
+                _backupChatHistory = null;
+                _backupInputBarText = null;
+                _backupProviderName = null;
+                _backupModelName = null;
+            }
+            _isHijackedForTest = false;
+            Repaint();
+        }
+
+        /// <summary>
+        /// Programmatically submits a prompt through the existing send-button code path
+        /// (SendMessage) so the UI streams the response normally.
+        /// Returns true if started, false if window is busy or not currently hijacked.
+        /// </summary>
+        internal bool SubmitTestPrompt(string prompt)
+        {
+            if (!_isHijackedForTest) return false;
+            if (_agent == null || _agent.IsProcessing) return false;
+            _userQuery = prompt ?? "";
+            SendMessage();
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the most recently focused open UnityAgentWindow without creating one.
+        /// Returns null if none is open.
+        /// </summary>
+        internal static UnityAgentWindow FindOpenInstance()
+        {
+            var all = Resources.FindObjectsOfTypeAll<UnityAgentWindow>();
+            return (all != null && all.Length > 0) ? all[0] : null;
+        }
+
+        internal bool IsHijackedForTest => _isHijackedForTest;
+
         /// <summary>現在のプロバイダー/モデルに基づく実効コンテキスト上限を返す。</summary>
         private int ResolveCurrentMaxContextTokens()
         {

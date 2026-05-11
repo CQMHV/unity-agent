@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
+using AjisaiFlow.UnityAgent.Editor;
 using Debug = UnityEngine.Debug;
 
 namespace AjisaiFlow.UnityAgent.Editor.Tools
@@ -36,21 +37,37 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         // ════════════════════════════════════════════════════════════
         public static string CreateSession(string label, string providerId, string modelId)
         {
+            // Find an open UnityAgentWindow up-front so we can hijack its UI.
+            // Done outside the lock because Resources.FindObjectsOfTypeAll touches Unity main-thread state.
+            var window = UnityAgentWindow.FindOpenInstance();
+            if (window == null)
+                throw new InvalidOperationException("No UnityAgentWindow is open. Open it first via the 'UnityAgent > UnityAgent' menu before starting a test session.");
+
             lock (_sessionsLock)
             {
                 if (_sessions.Count >= MAX_CONCURRENT)
                     throw new InvalidOperationException($"Too many concurrent test sessions ({MAX_CONCURRENT} max). Discard some first.");
 
                 string id = SESSION_PREFIX + Guid.NewGuid().ToString("N").Substring(0, 8);
+                string finalLabel = "[TEST] " + (string.IsNullOrEmpty(label) ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") : label);
                 var ctx = new TestSessionContext
                 {
                     SessionId = id,
-                    Label = "[TEST] " + (string.IsNullOrEmpty(label) ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") : label),
+                    Label = finalLabel,
                     ProviderId = providerId,
                     ModelId = modelId,
                     CreatedAt = DateTime.UtcNow,
                 };
                 ctx.Core = UnityAgentCore.CreateProgrammaticInstance(providerId, modelId);
+                ctx.AttachedWindow = window;
+
+                // Hijack the UI so the test session's chat appears live in the window.
+                try { window.HijackForTest(ctx.Core, finalLabel); }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("Failed to hijack UnityAgentWindow for test session: " + ex.Message, ex);
+                }
+
                 _sessions[id] = ctx;
                 return id;
             }
@@ -75,6 +92,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 if (_sessions.TryGetValue(sessionId, out var ctx))
                 {
                     try { ctx.Core?.Cancel(); } catch { /* ignore */ }
+                    try { ctx.AttachedWindow?.RestoreFromTestHijack(); } catch { /* best-effort */ }
                     _sessions.Remove(sessionId);
                     if (deleteHistoryFile && !string.IsNullOrEmpty(ctx.HistoryFilePath) && System.IO.File.Exists(ctx.HistoryFilePath))
                     {
@@ -128,13 +146,29 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             var turnSw = Stopwatch.StartNew();
             long timeoutMs = timeoutSec * 1000L;
 
-            // ── Start AI processing as a separate editor coroutine ──
+            // ── Submit the prompt through the hijacked UnityAgentWindow's existing
+            //    send-button code path so the UI renders the user message and streams
+            //    the AI response normally. Falls back to a direct ProcessUserQuery
+            //    coroutine if no window is attached (legacy/headless safety net).
             bool startFailed = false;
             string startError = null;
             try
             {
-                EditorCoroutineUtility.StartCoroutineOwnerless(
-                    ctx.Core.ProcessUserQuery(prompt, null, null, null, null, null));
+                bool submitted = false;
+                if (ctx.AttachedWindow != null)
+                {
+                    submitted = ctx.AttachedWindow.SubmitTestPrompt(prompt);
+                    if (!submitted)
+                    {
+                        startFailed = true;
+                        startError = "Failed to submit prompt to UnityAgentWindow (window busy or no longer hijacked).";
+                    }
+                }
+                else
+                {
+                    EditorCoroutineUtility.StartCoroutineOwnerless(
+                        ctx.Core.ProcessUserQuery(prompt, null, null, null, null, null));
+                }
             }
             catch (Exception ex)
             {
@@ -357,6 +391,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         public bool IsProcessing;
         public string LastError;       // TODO: wire up from ProcessUserQuery error path
         public string HistoryFilePath; // TODO: wire up if Core exposes session file path
+        public UnityAgentWindow AttachedWindow; // UI window currently hijacked for this session (null if not attached)
     }
 #pragma warning restore 649
 }

@@ -128,6 +128,22 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 ctx.Core = newCore;
                 ctx.ProviderId = providerId;
                 ctx.ModelId = modelId;
+
+                // If a UnityAgentWindow is hijacked for this session, re-hijack with
+                // the new core so the live UI continues to display the test session.
+                // HijackForTest is re-entrant: it implicitly restores the previous
+                // hijack (which was also a test core) before swapping in the new one.
+                // We then clear the chat panel and replay the preserved history so the
+                // user sees the conversation that just got restored onto newCore.
+                if (ctx.AttachedWindow != null)
+                {
+                    try { ctx.AttachedWindow.HijackForTest(newCore, ctx.Label); }
+                    catch (Exception ex)
+                    {
+                        return $"Error: model changed on core but UI re-hijack failed: {ex.Message}";
+                    }
+                }
+
                 return $"{ctx.SessionId} model changed: {oldP}/{oldM} → {providerId}/{modelId}";
             }
             catch (Exception ex) { return "Error: " + ex.Message; }
