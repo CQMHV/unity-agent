@@ -64,6 +64,13 @@ namespace AjisaiFlow.UnityAgent.Editor
         private int _sessionUndoCount = 0;
         public int SessionUndoCount => _sessionUndoCount;
 
+        /// <summary>
+        /// 1ターン (= 1 ProcessUserQuery 呼び出し) が完了した際に発火するイベント。
+        /// 通常完了・ツールループ上限・コンテキスト上限・エラー path のいずれでも発火する。
+        /// Self-Driving Test Tools (TestRunner) などプログラマティックに会話を駆動する用途向け。
+        /// </summary>
+        internal event Action<TurnResult> OnTurnComplete;
+
         /// <summary>1回のユーザーリクエストに対するツール→LLMループ回数。</summary>
         private int _toolLoopCount;
         private const int MaxToolLoops = 30;
@@ -268,7 +275,63 @@ namespace AjisaiFlow.UnityAgent.Editor
             _isProcessing = true;
             _toolLoopCount = 0;
             ToolConfirmState.SessionSkipAll = false;
-            yield return ProcessQueryInternal(userMessage, onReplyReceived, onStatus, onDebugLog, onPartialResponse, onStreamEvent);
+
+            // ── TurnResult accumulator for OnTurnComplete subscribers (TestRunner 等) ──
+            // 完了 (HandleResponse 内 3 箇所 + エラー path) で発火するため、コールバックをラップして
+            // クロージャ経由で turnResult を共有する。
+            var turnResult = new TurnResult();
+            var turnStart = System.Diagnostics.Stopwatch.StartNew();
+            int initialInput = _sessionInputTokens;
+            int initialOutput = _sessionOutputTokens;
+            bool turnFired = false;
+
+            Action<bool, string> fireTurnComplete = (completed, errorOrNull) =>
+            {
+                if (turnFired) return;
+                turnFired = true;
+                turnResult.DurationMs = turnStart.ElapsedMilliseconds;
+                turnResult.InputTokens = _sessionInputTokens - initialInput;
+                turnResult.OutputTokens = _sessionOutputTokens - initialOutput;
+                turnResult.Completed = completed;
+                if (errorOrNull != null) turnResult.Error = errorOrNull;
+                try { OnTurnComplete?.Invoke(turnResult); }
+                catch (Exception evtEx) { Debug.LogError("[UnityAgentCore] OnTurnComplete handler threw: " + evtEx); }
+            };
+
+            var userReply = onReplyReceived;
+            Action<string, bool> wrappedReply = (text, isFinal) =>
+            {
+                if (isFinal)
+                {
+                    turnResult.Text = text;
+                    fireTurnComplete(true, null);
+                }
+                userReply?.Invoke(text, isFinal);
+            };
+
+            var userStream = onStreamEvent;
+            Action<Interfaces.ChatStreamEvent> wrappedStream = (evt) =>
+            {
+                if (evt.Kind == Interfaces.StreamEventKind.ToolCallHint && !string.IsNullOrEmpty(evt.Chunk))
+                {
+                    turnResult.ToolCalls.Add(new ToolCallRecord { Name = evt.Chunk });
+                }
+                userStream?.Invoke(evt);
+            };
+
+            // エラー path: provider.CallLLM の error callback は ProcessQueryInternal 内で
+            // _isProcessing=false + onReplyReceived(error, false) を呼ぶが、isFinal=false のため
+            // wrappedReply は OnTurnComplete を発火しない。そこで完了監視コルーチンを並走させる。
+            yield return ProcessQueryInternal(userMessage, wrappedReply, onStatus, onDebugLog, onPartialResponse, wrappedStream);
+
+            // ProcessQueryInternal が yield 終了しても HandleResponse が StartCoroutineOwnerless で
+            // 継続している可能性があるため、_isProcessing が false になるまで待ってから error 検出する。
+            while (_isProcessing)
+                yield return null;
+
+            // ここまで来て turnFired==false なら、error path (isFinal=false) かキャンセルで終わったケース。
+            if (!turnFired)
+                fireTurnComplete(false, turnResult.Error ?? "Cancelled or errored without final reply");
         }
 
         private IEnumerator ProcessQueryInternal(string userMessage, Action<string, bool> onReplyReceived, Action<string> onStatus, Action<string> onDebugLog, Action<string> onPartialResponse, Action<Interfaces.ChatStreamEvent> onStreamEvent = null)
@@ -1736,5 +1799,39 @@ namespace AjisaiFlow.UnityAgent.Editor
         public string text;
         [NonSerialized] public byte[] imageBytes;
         [NonSerialized] public string imageMimeType;
+    }
+
+    /// <summary>
+    /// Aggregated result of one programmatic chat turn (used by TestRunner / Self-Driving Test Tools).
+    /// </summary>
+    internal class TurnResult
+    {
+        public string Text;
+        public List<ToolCallRecord> ToolCalls = new List<ToolCallRecord>();
+        public int InputTokens;
+        public int OutputTokens;
+        public int CachedTokens;
+        public double EstimatedCostUsd;
+        public long DurationMs;
+        public bool Completed;
+        public string Error;
+        public List<ConsoleEntry> ConsoleLogs;  // populated by TestRunner if requested
+    }
+
+    internal class ToolCallRecord
+    {
+        public string Name;
+        public string ArgsJson;
+        public string Result;
+        public long DurationMs;
+    }
+
+    internal class ConsoleEntry
+    {
+        public string Level;       // "Log" / "Warning" / "Error" / "Exception" / "Assert"
+        public string Message;
+        public string StackTrace;
+        public string Timestamp;   // "HH:mm:ss"
+        public DateTime At;
     }
 }
