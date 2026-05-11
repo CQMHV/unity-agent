@@ -8,6 +8,8 @@ using UnityEngine;
 using UnityEditor;
 using AjisaiFlow.UnityAgent.Editor.Interfaces;
 using AjisaiFlow.UnityAgent.Editor.MCP;
+using AjisaiFlow.UnityAgent.Editor.Providers;
+using AjisaiFlow.UnityAgent.Editor.Providers.Gemini;
 using AjisaiFlow.UnityAgent.SDK;
 
 namespace AjisaiFlow.UnityAgent.Editor
@@ -154,6 +156,82 @@ namespace AjisaiFlow.UnityAgent.Editor
         public UnityAgentCore(ILLMProvider provider)
         {
             _provider = provider;
+        }
+
+        /// <summary>
+        /// Programmatic factory for TestRunner — creates a fresh UnityAgentCore with
+        /// the specified provider/model. Empty providerId / modelId fall back to the
+        /// values currently persisted in AgentSettings (SettingsStore).
+        /// </summary>
+        /// <param name="providerId">
+        /// LLMProviderType enum name (e.g. "Gemini", "Claude_API", "OpenAI"). Case-insensitive.
+        /// Empty/null => use the active provider stored in <c>UnityAgent_ProviderType</c>.
+        /// </param>
+        /// <param name="modelId">
+        /// Model identifier (e.g. "gemini-2.5-flash"). Empty/null => use the model currently
+        /// saved for the resolved provider (which itself defaults to <c>desc.DefaultModel</c>).
+        /// </param>
+        /// <exception cref="ArgumentException">providerId did not match any LLMProviderType.</exception>
+        /// <exception cref="InvalidOperationException">Resolved provider requires an API key but none is configured.</exception>
+        internal static UnityAgentCore CreateProgrammaticInstance(string providerId, string modelId)
+        {
+            // ── Resolve provider type ──
+            LLMProviderType providerType;
+            if (string.IsNullOrWhiteSpace(providerId))
+            {
+                providerType = (LLMProviderType)SettingsStore.GetInt("UnityAgent_ProviderType", 0);
+            }
+            else if (!Enum.TryParse<LLMProviderType>(providerId, true, out providerType))
+            {
+                throw new ArgumentException(
+                    $"Unknown provider '{providerId}'. Valid: {string.Join(",", Enum.GetNames(typeof(LLMProviderType)))}",
+                    nameof(providerId));
+            }
+
+            // ── Build ProviderConfig from persisted settings, then optionally override model ──
+            var configs = ProviderRegistry.LoadAllConfigs();
+            if (!configs.TryGetValue(providerType, out var cfg) || cfg == null)
+                throw new InvalidOperationException($"No persisted ProviderConfig found for '{providerType}'.");
+
+            if (!string.IsNullOrWhiteSpace(modelId))
+                cfg.ModelName = modelId;
+
+            // ── API key validation — only for SettingsKinds that actually require one.
+            //    CLI / Clipboard / BrowserBridge / MCPServer / OpenAI-compatible-URL providers
+            //    are excluded (mirrors UnityAgentWindow.IsActiveProviderApiKeyMissing). ──
+            var desc = ProviderRegistry.Get(providerType);
+            bool requiresApiKey;
+            switch (desc.SettingsKind)
+            {
+                case ProviderSettingsKind.OpenAICompatibleApiKey:
+                case ProviderSettingsKind.ClaudeApi:
+                case ProviderSettingsKind.VertexAI:
+                    requiresApiKey = true;
+                    break;
+                case ProviderSettingsKind.Gemini:
+                    // Custom endpoint mode does not require a key
+                    requiresApiKey = cfg.GeminiMode != GeminiConnectionMode.Custom;
+                    break;
+                default:
+                    requiresApiKey = false;
+                    break;
+            }
+            if (requiresApiKey && string.IsNullOrWhiteSpace(cfg.ApiKey))
+            {
+                throw new InvalidOperationException(
+                    $"Provider '{providerType}' has no API key configured. " +
+                    "Set it in UnityAgent Settings before invoking the TestRunner.");
+            }
+
+            // ── Thinking / effort: TestRunner defaults to disabled for determinism. ──
+            const bool useThinking = false;
+            const int thinkingBudget = 0;
+            const int effortLevel = 0;
+
+            var provider = ProviderRegistry.CreateProvider(providerType, cfg, useThinking, thinkingBudget, effortLevel);
+            AgentLogger.Info(LogTag.Core,
+                $"CreateProgrammaticInstance: provider={providerType}, model={cfg.ModelName}");
+            return new UnityAgentCore(provider);
         }
 
         // ═══════════════════════════════════════════════════════
