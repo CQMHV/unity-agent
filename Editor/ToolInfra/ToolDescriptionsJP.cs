@@ -304,6 +304,12 @@ namespace AjisaiFlow.UnityAgent.Editor
             { "CaptureSceneView", "Scene viewのスクリーンショット" },
             { "CaptureMultiAngle", "複数角度からスクリーンショット" },
 
+            // ── Window Capture (Windows only) ──
+            { "ListEditorWindows", "EditorWindow一覧を表示（タイトル/型/矩形）" },
+            { "ListMonitors", "モニター一覧を表示（デバイス名/解像度/プライマリ）" },
+            { "CaptureEditorWindow", "EditorWindowをキャプチャ（タイトル名指定）" },
+            { "CaptureMonitor", "モニター全体をキャプチャ（primary/index/device指定）" },
+
             // ── Build ──
             { "TriggerVRChatBuildTest", "VRChat Build & Test を実行" },
             { "TriggerNDMFManualBake", "NDMFの手動ベイクを実行" },

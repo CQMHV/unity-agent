@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.10.3] — 2026-05-11
+
+### Added
+- **Window Capture** ツール群 (Windows Editor のみ): `ListEditorWindows` / `ListMonitors` / `CaptureEditorWindow` / `CaptureMonitor`。AI が Unity 内部の任意 EditorWindow（設定パネル / Inspector / Console / カスタムウィンドウ）や物理モニター全体をスクリーンショット可能。
+- Per-monitor DPI 自動検出・補正 (`Shcore.dll!GetDpiForMonitor`)。4K@150% + 1080p@100% のような混在環境でも各モニターのスケールに合わせて正しい物理 px でキャプチャ。
+- `maxWidth` パラメータ — 長辺の上限を指定して bilinear ダウンスケール（4K → 1280px で 5 倍以上の容量削減）
+- `format='jpg'` + `jpgQuality` — JPG 出力で UI スクショの容量を大幅圧縮
+- `saveToPath` — 任意のパスへの追加保存
+- `waitForRepaint=true` — リフレクションで `HostView.RepaintImmediately()` を呼び出し、docked タブ切替を 1 回呼び出しで反映
+
 ### Added
 - **Avatar Optimizer Window** (`UnityAgent > Avatar Optimizer`) — MD3SDK / UI Toolkit ベースの統合最適化 UI。1 画面で Performance 解析 / AAO TraceAndOptimize 設定 / NDMF Mesh Simplifier / テクスチャ最適化を操作。アバター ルートは Selection から自動検出 (VRCAvatarDescriptor → Animator フォールバック)
 - **NDMF Tester Window** (`UnityAgent > NDMF Tester`) — NDMFTools / BuildPipelineTools / AvatarPerformanceAnalyzer の各 API をボタンから直接呼び出してデバッグするウィンドウ
