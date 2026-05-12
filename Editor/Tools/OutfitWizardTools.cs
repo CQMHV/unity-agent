@@ -57,7 +57,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (prefab == null)
                 return $"Error: Prefab not found at '{prefabPath}'.";
 
-            bool doOptimize = addOptimizer.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool doOptimize = ToolUtility.ParseBool(addOptimizer);
 
             // Build confirmation message
             var confirmSb = new StringBuilder();

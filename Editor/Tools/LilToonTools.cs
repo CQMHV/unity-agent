@@ -339,8 +339,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
 
             object transparentMode = Enum.Parse(transparentModeType, "Normal");
-            bool isOutline = !string.IsNullOrEmpty(outline) && outline.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool isLite = !string.IsNullOrEmpty(lite) && lite.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool isOutline = ToolUtility.ParseBool(outline);
+            bool isLite = ToolUtility.ParseBool(lite);
 
             // If outline is not specified, detect from current shader
             if (string.IsNullOrEmpty(outline))
@@ -368,7 +368,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
             else
             {
-                // Fallback: manually set shader by name
+                AgentLogger.Warning(LogTag.Tool, "LilToon SetupMaterialWithRenderingMode reflection target missing — lilToon internal API may have changed. Falling back to shader-name resolution.");
                 string shaderName = BuildShaderName(mode, isOutline, isLite);
                 var shader = Shader.Find(shaderName);
                 if (shader == null)

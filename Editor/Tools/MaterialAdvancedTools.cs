@@ -59,7 +59,7 @@ keywords: semicolon-separated 'keyword=true/false'. Example: '_EMISSION=true;_NO
                 if (eqIdx <= 0) continue;
 
                 string kw = trimmed.Substring(0, eqIdx).Trim();
-                bool enable = trimmed.Substring(eqIdx + 1).Trim().ToLower() == "true";
+                bool enable = ToolUtility.ParseBool(trimmed.Substring(eqIdx + 1));
 
                 if (enable) mat.EnableKeyword(kw);
                 else mat.DisableKeyword(kw);

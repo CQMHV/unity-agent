@@ -148,7 +148,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 switch (paramType)
                 {
                     case AnimatorControllerParameterType.Bool:
-                        param.defaultBool = defaultValue.ToLower() == "true";
+                        param.defaultBool = ToolUtility.ParseBool(defaultValue);
                         break;
                     case AnimatorControllerParameterType.Int:
                         if (int.TryParse(defaultValue, out int intVal))
@@ -542,10 +542,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             {
                 case AnimatorControllerParameterType.Bool:
                     oldVal = p.defaultBool.ToString();
-                    string lower = (defaultValue ?? "").Trim().ToLower();
-                    if (lower != "true" && lower != "false" && lower != "0" && lower != "1")
-                        return $"Error: Bool default must be 'true' or 'false'. Got '{defaultValue}'.";
-                    p.defaultBool = (lower == "true" || lower == "1");
+                    if (!ToolUtility.TryParseBool(defaultValue, out bool boolDefault))
+                        return $"Error: Bool default must be true/false/0/1/yes/no/on/off/enabled/disabled. Got '{defaultValue}'.";
+                    p.defaultBool = boolDefault;
                     break;
                 case AnimatorControllerParameterType.Int:
                     oldVal = p.defaultInt.ToString();
@@ -838,9 +837,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (idx > 0)
             {
                 paramName = input.Substring(0, idx).Trim();
-                string valStr = input.Substring(idx + 1).Trim().ToLower();
-                if (valStr == "true") { value = true; return true; }
-                if (valStr == "false") { value = false; return true; }
+                if (ToolUtility.TryParseBool(input.Substring(idx + 1), out value))
+                    return true;
             }
             paramName = "";
             value = false;

@@ -754,21 +754,7 @@ weight: default weight (0-1).")]
         private static bool Is2DBlendType(BlendTreeType type) =>
             type == BlendTreeType.SimpleDirectional2D || type == BlendTreeType.FreeformDirectional2D || type == BlendTreeType.FreeformCartesian2D;
 
-        private static bool ParseBool(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return false;
-            switch (s.Trim().ToLowerInvariant())
-            {
-                case "true":
-                case "1":
-                case "on":
-                case "yes":
-                case "enabled":
-                    return true;
-                default:
-                    return false;
-            }
-        }
+        private static bool ParseBool(string s) => ToolUtility.ParseBool(s);
 
         private static bool TryParseBodyPart(string name, out AvatarMaskBodyPart part)
         {
@@ -1189,9 +1175,8 @@ Essential for debugging 'FX param changed but visuals don't react' — tells you
             if (idx > 0)
             {
                 paramName = input.Substring(0, idx).Trim();
-                string v = input.Substring(idx + 1).Trim().ToLower();
-                if (v == "true") { value = true; return true; }
-                if (v == "false") { value = false; return true; }
+                if (ToolUtility.TryParseBool(input.Substring(idx + 1), out value))
+                    return true;
             }
             paramName = ""; value = false; return false;
         }

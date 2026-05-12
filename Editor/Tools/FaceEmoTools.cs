@@ -935,9 +935,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                     if (int.TryParse(value, out int iv)) { prop.intValue = iv; return true; }
                     return false;
                 case SerializedPropertyType.Boolean:
-                    if (bool.TryParse(value, out bool bv)) { prop.boolValue = bv; return true; }
-                    if (value == "0") { prop.boolValue = false; return true; }
-                    if (value == "1") { prop.boolValue = true; return true; }
+                    if (ToolUtility.TryParseBool(value, out bool bv)) { prop.boolValue = bv; return true; }
                     return false;
                 case SerializedPropertyType.Float:
                     if (float.TryParse(value, out float fv)) { prop.floatValue = fv; return true; }

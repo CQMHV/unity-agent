@@ -279,8 +279,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 targetObjects.Add(target.gameObject);
             }
 
-            bool isSaved = saved.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool isDefaultOn = defaultOn.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool isSaved = ToolUtility.ParseBool(saved);
+            bool isDefaultOn = ToolUtility.ParseBool(defaultOn);
 
             if (!AgentSettings.RequestConfirmation(
                 "VRCFury オブジェクトトグルの作成",
@@ -352,9 +352,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (bsPairs.Count == 0)
                 return "Error: No blend shapes specified.";
 
-            bool isSaved = saved.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool isSlider = slider.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool isDefaultOn = defaultOn.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool isSaved = ToolUtility.ParseBool(saved);
+            bool isSlider = ToolUtility.ParseBool(slider);
+            bool isDefaultOn = ToolUtility.ParseBool(defaultOn);
 
             if (!AgentSettings.RequestConfirmation(
                 "VRCFury BlendShapeトグルの作成",
@@ -403,8 +403,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (outfitObj == null)
                 return $"Error: GameObject '{outfitObjectName}' not found.";
 
-            bool isRecursive = recursive.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool isAlign = align.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool isRecursive = ToolUtility.ParseBool(recursive);
+            bool isAlign = ToolUtility.ParseBool(align);
 
             HumanBodyBones bone;
             if (!Enum.TryParse(targetBone, true, out bone))
@@ -551,7 +551,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (smr == null)
                 return $"Error: '{linkedMeshName}' does not have a SkinnedMeshRenderer.";
 
-            bool isIncludeAll = includeAll.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool isIncludeAll = ToolUtility.ParseBool(includeAll);
 
             if (!AgentSettings.RequestConfirmation(
                 "VRCFury BlendShapeLinkの作成",

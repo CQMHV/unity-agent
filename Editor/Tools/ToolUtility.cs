@@ -77,5 +77,55 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 current = next;
             }
         }
+
+        /// <summary>
+        /// Parse a string into a bool. Truthy: true/1/on/yes/enabled. Anything else (including null/empty/invalid) is false.
+        /// Use when the parameter is optional and "unspecified" should be treated as false.
+        /// </summary>
+        public static bool ParseBool(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            switch (s.Trim().ToLowerInvariant())
+            {
+                case "true":
+                case "1":
+                case "on":
+                case "yes":
+                case "enabled":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Try to parse a string into a bool, distinguishing "explicit false" from "invalid/unspecified".
+        /// Truthy: true/1/on/yes/enabled. Falsy: false/0/off/no/disabled. Anything else returns false (the method, not the value).
+        /// Use when the caller needs to validate the input or skip when unspecified.
+        /// </summary>
+        public static bool TryParseBool(string s, out bool result)
+        {
+            result = false;
+            if (string.IsNullOrEmpty(s)) return false;
+            switch (s.Trim().ToLowerInvariant())
+            {
+                case "true":
+                case "1":
+                case "on":
+                case "yes":
+                case "enabled":
+                    result = true;
+                    return true;
+                case "false":
+                case "0":
+                case "off":
+                case "no":
+                case "disabled":
+                    result = false;
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 }

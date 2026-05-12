@@ -169,7 +169,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 void SetOptionBool(string propName, string value)
                 {
                     if (string.IsNullOrEmpty(value)) return;
-                    bool bVal = value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    if (!ToolUtility.TryParseBool(value, out bool bVal)) return;
                     var p = optProp.FindPropertyRelative(propName);
                     if (p != null)
                     {

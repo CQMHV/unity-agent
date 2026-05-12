@@ -78,21 +78,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         private static string ContainerPath(string assetDir, string systemKey)
             => $"{assetDir}/AAC_{systemKey}_Container.asset";
 
-        private static bool ParseBool(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return false;
-            switch (s.Trim().ToLowerInvariant())
-            {
-                case "true":
-                case "1":
-                case "on":
-                case "yes":
-                case "enabled":
-                    return true;
-                default:
-                    return false;
-            }
-        }
+        private static bool ParseBool(string s) => ToolUtility.ParseBool(s);
 
         private static string Truncate(string s, int max)
             => s == null ? "" : (s.Length <= max ? s : s.Substring(0, max) + "…");

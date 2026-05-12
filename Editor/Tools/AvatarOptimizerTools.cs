@@ -40,14 +40,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return string.Join("/", parts);
         }
 
-        private static bool TryParseBool(string value, out bool result)
-        {
-            result = false;
-            if (string.IsNullOrEmpty(value)) return false;
-            if (value.Equals("true", StringComparison.OrdinalIgnoreCase)) { result = true; return true; }
-            if (value.Equals("false", StringComparison.OrdinalIgnoreCase)) { result = false; return true; }
-            return false;
-        }
+        private static bool TryParseBool(string value, out bool result) => ToolUtility.TryParseBool(value, out result);
 
         // ========== 1. AddTraceAndOptimize ==========
 

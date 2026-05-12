@@ -63,9 +63,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (existing != null)
                 return $"Error: '{avatarRootName}' already has AvatarConverterSettings. Use ConfigureQuestConversion to modify.";
 
-            bool removeDynamics = removeAvatarDynamics.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool removeVC = removeVertexColor.Equals("true", StringComparison.OrdinalIgnoreCase);
-            bool genTextures = generateQuestTextures.Equals("true", StringComparison.OrdinalIgnoreCase);
+            bool removeDynamics = ToolUtility.ParseBool(removeAvatarDynamics);
+            bool removeVC = ToolUtility.ParseBool(removeVertexColor);
+            bool genTextures = ToolUtility.ParseBool(generateQuestTextures);
             float brightness = 0.83f;
             float.TryParse(mainTextureBrightness, out brightness);
             var texSize = ParseTextureSize(maxTextureSize);

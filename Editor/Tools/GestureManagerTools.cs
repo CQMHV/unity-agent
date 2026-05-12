@@ -502,14 +502,7 @@ normalizedTime, isInTransition, and playing clip weights.")]
         }
 
 #if GESTURE_MANAGER
-        private static bool TryParseBool(string s, out bool result)
-        {
-            s = s?.Trim().ToLowerInvariant();
-            if (s == "true" || s == "1") { result = true; return true; }
-            if (s == "false" || s == "0") { result = false; return true; }
-            result = false;
-            return false;
-        }
+        private static bool TryParseBool(string s, out bool result) => ToolUtility.TryParseBool(s, out result);
 #endif
     }
 }
