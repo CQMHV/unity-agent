@@ -126,8 +126,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return sb.ToString().TrimEnd();
         }
 
-        [AgentTool("Configure an existing collider on a GameObject. colliderIndex selects which collider (0-based) if multiple exist. Use -1 for unchanged values.")]
-        public static string ConfigureCollider(string goName, int colliderIndex = 0, bool isTrigger = false, string center = "", string size = "", float radius = -1f, float height = -1f, int direction = -1)
+        [AgentTool("Configure an existing collider on a GameObject. colliderIndex selects which collider (0-based) if multiple exist. isTrigger: -1=unchanged (default), 0=false, 1=true. Use -1 for other unchanged values too. Pass empty string for center/size to leave them unchanged.")]
+        public static string ConfigureCollider(string goName, int colliderIndex = 0, int isTrigger = -1, string center = "", string size = "", float radius = -1f, float height = -1f, int direction = -1)
         {
             var go = FindGO(goName);
             if (go == null) return NotFound(goName);
@@ -141,7 +141,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             var c = colliders[colliderIndex];
             Undo.RecordObject(c, "Configure Collider via Agent");
 
-            c.isTrigger = isTrigger;
+            if (isTrigger >= 0) c.isTrigger = isTrigger != 0;
             var ctr = ParseVector3(center);
 
             if (c is BoxCollider box)

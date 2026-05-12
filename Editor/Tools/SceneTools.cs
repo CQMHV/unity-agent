@@ -77,7 +77,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return info;
         }
 
-        [AgentTool("Set the parent of a child GameObject. worldPositionStays=false (default) places the child at the parent's local origin, true keeps its world position.")]
+        [AgentTool("Set the parent of a child GameObject. worldPositionStays=false (default) SNAPS the child to the parent's local origin AND resets localRotation to identity — useful for fresh attachment. worldPositionStays=true preserves the child's current world position AND rotation (Unity standard behavior) — use this when re-parenting a posed bone or accessory that already sits in the right place.")]
         public static string SetParent(string childName, string parentName, bool worldPositionStays = false)
         {
             var child = FindGO(childName);

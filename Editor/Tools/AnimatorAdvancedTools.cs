@@ -44,6 +44,17 @@ The state's motion is replaced with the new BlendTree. Add children with AddBlen
             if (!TryParseBlendTreeType(blendType, out BlendTreeType btType))
                 return $"Error: Unknown blendType '{blendType}'. Valid: Simple1D, SimpleDirectional2D, FreeformDirectional2D, FreeformCartesian2D, Direct.";
 
+            // Remove the previous BlendTree sub-asset (if any) so retries don't bloat the controller
+            // with orphaned BlendTree objects that pile up inside the .controller YAML.
+            bool replacedExisting = false;
+            if (stateWrapper.state.motion is BlendTree oldTree
+                && AssetDatabase.GetAssetPath(oldTree) == controllerPath)
+            {
+                AssetDatabase.RemoveObjectFromAsset(oldTree);
+                UnityEngine.Object.DestroyImmediate(oldTree, allowDestroyingAssets: true);
+                replacedExisting = true;
+            }
+
             var blendTree = new BlendTree();
             blendTree.name = stateName + "_BlendTree";
             blendTree.blendType = btType;
@@ -63,7 +74,8 @@ The state's motion is replaced with the new BlendTree. Add children with AddBlen
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
 
-            return $"Success: Created BlendTree '{blendTree.name}' (type={btType}) in state '{stateName}'. Use AddBlendTreeChild to add motions.";
+            string suffix = replacedExisting ? " (replaced previous BlendTree sub-asset)" : "";
+            return $"Success: Created BlendTree '{blendTree.name}' (type={btType}) in state '{stateName}'{suffix}. Use AddBlendTreeChild to add motions.";
         }
 
         [AgentTool(@"Add a child motion to a BlendTree.
@@ -220,6 +232,8 @@ Example: 'Head=true;LeftArm=false;RightArm=false' to only enable head.")]
             Undo.RecordObject(mask, "Configure AvatarMask");
 
             var entries = bodyParts.Split(';');
+            var unknownParts = new List<string>();
+            int appliedCount = 0;
             foreach (var entry in entries)
             {
                 string trimmed = entry.Trim();
@@ -230,13 +244,23 @@ Example: 'Head=true;LeftArm=false;RightArm=false' to only enable head.")]
                 bool active = ParseBool(trimmed.Substring(eqIdx + 1));
 
                 if (TryParseBodyPart(partName, out AvatarMaskBodyPart part))
+                {
                     mask.SetHumanoidBodyPartActive(part, active);
+                    appliedCount++;
+                }
+                else
+                {
+                    unknownParts.Add(partName);
+                }
             }
 
             EditorUtility.SetDirty(mask);
             AssetDatabase.SaveAssets();
 
-            return $"Success: Configured AvatarMask body parts at '{maskPath}'.";
+            if (unknownParts.Count > 0)
+                return $"Error: Configured {appliedCount} body part(s), but rejected unknown part(s): {string.Join(", ", unknownParts)}. Valid: Root, Body, Head, LeftLeg, RightLeg, LeftArm, RightArm, LeftFingers, RightFingers, LeftFootIK, RightFootIK, LeftHandIK, RightHandIK.";
+
+            return $"Success: Configured {appliedCount} body part(s) on AvatarMask at '{maskPath}'.";
         }
 
         [AgentTool(@"Populate an AvatarMask's transform list from an avatar's bone hierarchy.
@@ -335,6 +359,7 @@ paths: semicolon-separated 'transformPath=true/false'. Example: 'Armature/Hips/S
 
             Undo.RecordObject(mask, "Set AvatarMask Transform");
             int updated = 0;
+            var notFoundPaths = new List<string>();
 
             var entries = paths.Split(';');
             foreach (var entry in entries)
@@ -346,21 +371,32 @@ paths: semicolon-separated 'transformPath=true/false'. Example: 'Armature/Hips/S
                 string path = trimmed.Substring(0, eqIdx).Trim();
                 bool active = ParseBool(trimmed.Substring(eqIdx + 1));
 
+                bool found = false;
                 for (int i = 0; i < mask.transformCount; i++)
                 {
                     if (mask.GetTransformPath(i) == path)
                     {
                         mask.SetTransformActive(i, active);
                         updated++;
+                        found = true;
                         break;
                     }
                 }
+                if (!found) notFoundPaths.Add(path);
             }
 
             EditorUtility.SetDirty(mask);
             AssetDatabase.SaveAssets();
 
-            return $"Success: Updated {updated} transforms on AvatarMask.";
+            if (notFoundPaths.Count > 0)
+            {
+                string sample = notFoundPaths.Count > 5
+                    ? string.Join(", ", notFoundPaths.GetRange(0, 5)) + $" …(+{notFoundPaths.Count - 5} more)"
+                    : string.Join(", ", notFoundPaths);
+                return $"Error: Updated {updated} transforms, but {notFoundPaths.Count} path(s) not in mask: {sample}. Call SetAvatarMaskTransformsFromAvatar first, or use InspectAvatarMask to list valid paths.";
+            }
+
+            return $"Success: Updated {updated} transforms on AvatarMask at '{maskPath}'.";
         }
 
         [AgentTool("Inspect an AvatarMask. Shows body part states and transform paths with active states.")]
