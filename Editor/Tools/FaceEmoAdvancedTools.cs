@@ -3,6 +3,7 @@ using Suzuryg.FaceEmo.Domain;
 using Suzuryg.FaceEmo.Components;
 using Suzuryg.FaceEmo.Components.Data;
 using Suzuryg.FaceEmo.Components.Settings;
+using AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor;
 using FaceEmoMenu = Suzuryg.FaceEmo.Domain.Menu;
 using FaceEmoAnimation = Suzuryg.FaceEmo.Domain.Animation;
 #endif
@@ -983,9 +984,41 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
         [AgentTool("Set blend shape values to preview an expression on the mesh. " +
             "Format: 'shapeName=value;shapeName2=value2' (values 0-100). " +
-            "Use SearchExpressionShapes first to find correct shape names.")]
+            "Use SearchExpressionShapes first to find correct shape names. " +
+            "Routes through FaceEmoExpressionSession (Live via Bridge, Degraded via clip-fallback).")]
         public static string SetExpressionPreview(string meshObjectName, string blendShapeData)
-            => BlendShapeTools.SetMultipleBlendShapes(meshObjectName, blendShapeData);
+        {
+            if (string.IsNullOrWhiteSpace(meshObjectName))
+                return "Error: meshObjectName is empty.";
+            if (string.IsNullOrWhiteSpace(blendShapeData))
+                return "Error: blendShapeData is empty. Format: 'shapeName=value;shapeName2=value2'";
+
+            var gate = FaceEmoGate.RequireExpressionEditingReady();
+            if (!gate.Ok) return gate.ErrorMessage;
+
+            var session = FaceEmoExpressionSession.Active;
+            bool autoSession = false;
+            if (session == null)
+            {
+                string tmpPath = $"Assets/UnityAgent/Expressions/{System.IO.Path.GetRandomFileName().Replace(".","")}.anim";
+                session = FaceEmoExpressionSession.OpenForNewExpression(null, tmpPath);
+                autoSession = true;
+            }
+
+            var pairs = blendShapeData.Split(';');
+            int applied = 0;
+            foreach (var pair in pairs)
+            {
+                var idx = pair.IndexOf('=');
+                if (idx < 0) continue;
+                string name = pair.Substring(0, idx).Trim();
+                if (!float.TryParse(pair.Substring(idx + 1).Trim(), out float value)) continue;
+                session.SetBlendShape(meshObjectName, name, value);
+                applied++;
+            }
+            return $"Success: Applied {applied} blendshapes via {session.Mode} session." +
+                   (autoSession ? $" (auto-session: \"{session.PendingDisplayName}\")" : "");
+        }
 
         [AgentTool("Capture avatar face/expression preview using a dedicated camera (no SceneView side effects). " +
             "Internally delegates to CaptureFacePreview — produces a stable, reproducible image regardless of current SceneView state. " +
