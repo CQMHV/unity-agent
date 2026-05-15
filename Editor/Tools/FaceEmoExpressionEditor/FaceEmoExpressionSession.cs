@@ -142,8 +142,13 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
 
         private void DegradedSet(string smrRelativePath, string shapeName, float value)
         {
-            // Implemented in Task 3.5
-            throw new NotImplementedException();
+            AssetPathFallback.WriteBlendShapeCurve(Clip, smrRelativePath, shapeName, value);
+            // For asset clips, ensure save
+            if (!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(Clip)))
+            {
+                EditorUtility.SetDirty(Clip);
+            }
+            AssetPathFallback.RefreshFaceEmoWindow(Launcher);
         }
 
         public IReadOnlyDictionary<string, float> GetCurrentValues()
