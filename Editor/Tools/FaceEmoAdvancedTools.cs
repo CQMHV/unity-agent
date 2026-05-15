@@ -1073,21 +1073,37 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
         [AgentTool("Re-create expression animation clip from current mesh blend shapes " +
             "and update an existing FaceEmo expression's animation assignment. " +
-            "Use after adjusting blend shapes with SetExpressionPreview to update an existing expression.")]
+            "Use after adjusting blend shapes with SetExpressionPreview to update an existing expression. " +
+            "Routes through FaceEmoExpressionSession.OpenForMode + OverrideSavePath + Commit.")]
         public static string UpdateExpressionAnimation(string expressionName,
             string meshObjectName, string animPath, string meshPath = "",
             string gameObjectName = "")
         {
-            // Step 1: Create clip from current mesh weights
-            string clipResult = BlendShapeTools.CreateExpressionClip(meshObjectName, animPath, meshPath);
-            if (clipResult.StartsWith("Error")) return clipResult;
+            if (string.IsNullOrWhiteSpace(expressionName))
+                return "Error: expressionName is empty.";
+            if (string.IsNullOrWhiteSpace(meshObjectName))
+                return "Error: meshObjectName is empty.";
 
-            // Step 2: Update FaceEmo assignment
-            string setResult = SetExpressionAnimation(expressionName, animPath, "Mode", -1, gameObjectName);
-            if (setResult.StartsWith("Error"))
-                return $"Warning: Clip created at '{animPath}' but FaceEmo update failed: {setResult}";
+            var gate = FaceEmoGate.RequireExpressionEditingReady(gameObjectName);
+            if (!gate.Ok) return gate.ErrorMessage;
 
-            return $"Updated '{expressionName}': animation re-created from '{meshObjectName}' and FaceEmo assignment updated.";
+            var session = FaceEmoExpressionSession.OpenForMode(expressionName, gameObjectName);
+            var go = MeshAnalysisTools.FindGameObject(meshObjectName);
+            if (go == null) return $"Error: Mesh '{meshObjectName}' not found.";
+            var smr = go.GetComponent<SkinnedMeshRenderer>();
+            if (smr == null || smr.sharedMesh == null) return $"Error: SMR or mesh missing.";
+
+            int captured = 0;
+            for (int i = 0; i < smr.sharedMesh.blendShapeCount; i++)
+            {
+                float w = smr.GetBlendShapeWeight(i);
+                if (Mathf.Abs(w) < 0.001f) continue;
+                session.SetBlendShape(meshObjectName, smr.sharedMesh.GetBlendShapeName(i), w);
+                captured++;
+            }
+            session.OverrideSavePath(animPath);
+            session.Commit();
+            return $"Success: Updated '{expressionName}' with {captured} blendshapes.";
         }
 
         [AgentTool("Create expression animation clip from explicit blend shape data " +
