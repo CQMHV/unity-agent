@@ -86,6 +86,10 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (string.IsNullOrWhiteSpace(intent))
                 return "Error: intent is empty (try 'smile', 'angry', 'surprised', or a Japanese keyword like '笑顔').";
 
+            // FaceEmo Gate
+            var gate = FaceEmoGate.RequireExpressionEditingReady();
+            if (!gate.Ok) return gate.ErrorMessage;
+
             var profile = LoadOrBuild(avatarRootName, out string err);
             if (profile == null) return err;
 
