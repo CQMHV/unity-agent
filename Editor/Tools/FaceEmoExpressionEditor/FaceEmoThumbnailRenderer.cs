@@ -227,6 +227,28 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
         }
 
         /// <summary>
+        /// Force FaceEmo's MainView to refresh its thumbnail cache by relaunching the window.
+        /// modeName is informational (logged), since the relaunch is global.
+        /// Returns true if the window was open and was refreshed; false if not open or on error.
+        /// </summary>
+        public bool RefreshMainView(string modeName = null)
+        {
+            if (_launcher == null) { LastReflectionError = "Launcher is null"; return false; }
+            try
+            {
+                FaceEmoAPI.RefreshWindowIfOpen(_launcher);
+                if (!string.IsNullOrEmpty(modeName))
+                    Debug.Log($"[FaceEmoThumbnailRenderer] MainView refreshed (target Mode: {modeName})");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastReflectionError = $"RefreshMainView: {ex.GetType().Name}: {ex.Message}";
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Render the single-Mode thumbnail (A — MainThumbnailDrawer) and save as PNG.
         /// Returns the saved PNG path, or null on failure (sets <see cref="LastReflectionError"/>).
         /// Does NOT call Fail() — per-call user-data errors must not flip IsHealthy.
