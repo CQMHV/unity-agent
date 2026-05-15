@@ -168,6 +168,25 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
             {
                 SpikeThumbnailRender();
             }
+            if (GUILayout.Button("Test: Renderer.RenderModeThumbnail('Neutral')"))
+            {
+#if FACE_EMO
+                var gate = FaceEmoGate.RequireExpressionEditingReady();
+                if (!gate.Ok) { Log(gate.ErrorMessage); }
+                else
+                {
+                    using var r = new FaceEmoThumbnailRenderer();
+                    if (!r.TryInitialize(gate.Launcher)) { Log($"FAIL init: {r.LastReflectionError}"); }
+                    else
+                    {
+                        var path = r.RenderModeThumbnail("Neutral");
+                        Log(path != null ? $"OK: PNG at {path}" : $"FAIL: {r.LastReflectionError}");
+                    }
+                }
+#else
+                Log("SKIP: FACE_EMO not defined.");
+#endif
+            }
 
             EditorGUILayout.LabelField("Log:", EditorStyles.boldLabel);
             _scroll = EditorGUILayout.BeginScrollView(_scroll, GUILayout.ExpandHeight(true));

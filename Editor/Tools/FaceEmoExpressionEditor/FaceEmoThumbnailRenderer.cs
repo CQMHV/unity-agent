@@ -109,6 +109,112 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
         }
 
         /// <summary>
+        /// Render the single-Mode thumbnail (A — MainThumbnailDrawer) and save as PNG.
+        /// Returns the saved PNG path, or null on failure (sets <see cref="LastReflectionError"/>).
+        /// Does NOT call Fail() — per-call user-data errors must not flip IsHealthy.
+        /// </summary>
+        public string RenderModeThumbnail(string modeName)
+        {
+            if (!IsHealthy) { LastReflectionError = "Renderer not healthy — call TryInitialize first"; return null; }
+            if (_launcher == null) { LastReflectionError = "Launcher is null"; return null; }
+
+            var menu = FaceEmoAPI.LoadMenu(_launcher);
+            if (menu == null) { LastReflectionError = "Could not load FaceEmo menu"; return null; }
+            var (_, mode) = FaceEmoAPI.FindExpression(menu, modeName);
+            if (mode == null) { LastReflectionError = $"Mode '{modeName}' not found"; return null; }
+            var anim = mode.Animation;
+            if (anim == null || string.IsNullOrEmpty(anim.GUID))
+            { LastReflectionError = $"Mode '{modeName}' has no animation"; return null; }
+
+            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(AssetDatabase.GUIDToAssetPath(anim.GUID));
+            if (clip == null) { LastReflectionError = $"Clip not found for GUID {anim.GUID}"; return null; }
+
+            var texture = DriveSyncRender(_mainDrawer, anim, clip);
+            if (texture == null) { LastReflectionError = "Render timed out (50 iterations)"; return null; }
+
+            return SaveAsPng(texture, $"{SanitizeFileName(modeName)}.png");
+        }
+
+        /// <summary>
+        /// Render a thumbnail synchronously by repeatedly calling Update() until the cache fills.
+        /// Returns the cached Texture2D or null on timeout. Wraps reflection exceptions and
+        /// surfaces them via <see cref="LastReflectionError"/>.
+        /// </summary>
+        private Texture2D DriveSyncRender(object drawer, Suzuryg.FaceEmo.Domain.Animation animation, AnimationClip clip, int maxIterations = 50)
+        {
+            try
+            {
+                // Prime the cache request: first GetThumbnail returns hourglass placeholder,
+                // RequestUpdate schedules the actual render.
+                _getThumbnail.Invoke(drawer, new object[] { animation });
+                _requestUpdate.Invoke(drawer, new object[] { clip });
+
+                for (int i = 0; i < maxIterations; i++)
+                {
+                    _update.Invoke(drawer, null);
+                    var cached = _getCached.Invoke(drawer, new object[] { animation }) as Texture2D;
+                    if (cached != null) return cached;
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                var inner = (ex as TargetInvocationException)?.InnerException ?? ex;
+                LastReflectionError = $"DriveSyncRender: {inner.GetType().Name}: {inner.Message}";
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Save a Texture2D to the renderer's PNG cache. Returns the saved path
+        /// (relative to project root), or null on failure.
+        /// </summary>
+        private string SaveAsPng(Texture2D texture, string fileName)
+        {
+            if (texture == null) return null;
+            try
+            {
+                Directory.CreateDirectory(CacheRoot);
+                string path = Path.Combine(CacheRoot, fileName).Replace('\\', '/');
+
+                // EncodeToPNG requires readable texture — copy via RenderTexture if needed.
+                var readable = MakeReadableCopy(texture);
+                File.WriteAllBytes(path, readable.EncodeToPNG());
+                if (readable != texture) UnityEngine.Object.DestroyImmediate(readable);
+                return path;
+            }
+            catch (Exception ex)
+            {
+                LastReflectionError = $"SaveAsPng: {ex.GetType().Name}: {ex.Message}";
+                return null;
+            }
+        }
+
+        private static Texture2D MakeReadableCopy(Texture2D source)
+        {
+            if (source.isReadable) return source;
+            var rt = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Linear);
+            Graphics.Blit(source, rt);
+            var prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            var copy = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
+            copy.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0);
+            copy.Apply();
+            RenderTexture.active = prev;
+            RenderTexture.ReleaseTemporary(rt);
+            return copy;
+        }
+
+        private static string SanitizeFileName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "_";
+            var invalid = Path.GetInvalidFileNameChars();
+            var sb = new System.Text.StringBuilder(name.Length);
+            foreach (var c in name) sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+            return sb.ToString();
+        }
+
+        /// <summary>
         /// Sets <see cref="IsHealthy"/> to false, records <paramref name="msg"/> on
         /// <see cref="LastReflectionError"/>, and logs a Warning.
         ///
