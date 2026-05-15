@@ -71,3 +71,18 @@ Notes:
 - [ ] Bridge.IsHealthy=false を強制（例: FaceEmoInstaller の型名を一時的に書き換え）→ Degraded モードでも `.anim` が更新され、FaceEmo ウィンドウが再読込される
 - [ ] `CommitExpressionSession` 後、FaceEmo Menu に新しい Mode が追加されている
 - [ ] `ApplyFaceEmoToAvatar` を呼ぶと FX レイヤーに反映される
+
+---
+
+## Plan B Integration Test Checklist (after merge)
+
+シーン: FaceEmo + ターゲットアバター + 表情 1 つ以上が登録された状態
+
+- [ ] `CaptureFaceEmoModeThumbnail('Neutral')` → `Library/UnityAgent/face-thumbnails/Neutral.png` が生成され、顔が正しく描画されている
+- [ ] `CaptureFaceEmoGestureTable('Neutral')` → 4×2 のグリッド合成 PNG が生成され、8 セルが暗背景の上に並んでいる
+- [ ] `CaptureFaceEmoExMenuThumbnail('Neutral')` → ExMenu サイズのサムネ PNG が生成されている
+- [ ] 既存表情を編集 → `CommitExpressionSession` → `RefreshFaceEmoMainView()` → FaceEmo MainView のサムネが新しい表情を反映している
+- [ ] FaceEmo をアンインストール → 各 Capture ツールが "Error: FaceEmo is not installed." を返す
+- [ ] `FaceEmoThumbnailRenderer.IsHealthy=false` を強制 → Capture ツールが `Error: Thumbnail renderer init failed — ...` を返す（表情変更ツールは健在）
+- [ ] サムネ PNG が `Library/UnityAgent/face-thumbnails/` に蓄積する。ファイル名衝突時は上書き
+- [ ] 名前に invalid file char を含む Mode（例: `'Test/Slash'`）でも path が正しく sanitize される
