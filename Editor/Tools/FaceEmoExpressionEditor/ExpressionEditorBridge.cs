@@ -89,6 +89,32 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
             }
         }
 
+        public bool TrySetBlendShape(string smrRelativePath, string shapeName, float value)
+        {
+            if (!IsHealthy || _facade == null) return false;
+            try
+            {
+                // Build BlendShape struct (FaceEmo Domain type) via reflection
+                var bsType = Type.GetType("Suzuryg.FaceEmo.Domain.BlendShape, jp.suzuryg.face-emo.domain.Runtime");
+                if (bsType == null) { LastReflectionError = "BlendShape type not found"; return false; }
+
+                // BlendShape ctor takes (string path, string name) per FaceEmo domain conventions
+                var bs = Activator.CreateInstance(bsType, new object[] { smrRelativePath, shapeName });
+
+                var setMethod = _facade.GetType().GetMethod("SetBlendShapeValue");
+                if (setMethod == null) { LastReflectionError = "SetBlendShapeValue not found"; return false; }
+
+                setMethod.Invoke(_facade, new object[] { bs, value });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                var inner = (ex as TargetInvocationException)?.InnerException ?? ex;
+                LastReflectionError = $"TrySetBlendShape: {inner.GetType().Name}: {inner.Message}";
+                return false;
+            }
+        }
+
         public bool TryOpenPreviewWindow()
         {
             if (!IsHealthy) return false;
