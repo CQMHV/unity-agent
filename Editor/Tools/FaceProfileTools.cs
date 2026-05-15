@@ -216,7 +216,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                           $"(session mode: {session.Mode})");
             if (autoSession)
                 sb.AppendLine($"  (auto-session: \"{session.PendingDisplayName ?? session.TmpName}\". " +
-                              "Use CreateAndRegisterExpression with this name to commit, or it remains in-memory until Unity reload.)");
+                              "Call CommitExpressionSession to persist, or OpenExpressionSession beforehand to control the name.)");
             foreach (var line in smrResults) sb.AppendLine(line);
             if (resolved.Count > 0) sb.AppendLine($"  Resolved: {string.Join(", ", resolved)}");
             if (notFound.Count > 0)
