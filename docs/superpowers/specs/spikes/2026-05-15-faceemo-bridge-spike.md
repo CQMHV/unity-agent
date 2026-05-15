@@ -17,4 +17,16 @@ Status: TBD (filled in Task 0.4)
 Notes:
 
 ## Decision
-TBD — fill after all spikes run
+
+| Spike | Result |
+|---|---|
+| 0.2 IExpressionEditor DI | PASS / FAIL |
+| 0.3 Facade access | PASS / FAIL |
+| 0.4 SetBlendShapeValue live | PASS / PARTIAL / FAIL |
+
+### Implementation path
+- [ ] **Full Live + Degraded** (0.2-0.4 all PASS): Proceed with Phase 2-5 as written.
+- [ ] **Degraded only** (any of 0.2-0.4 FAIL): Skip Phase 2 Tasks 2.4/2.5. Bridge.TryOpen still possible (for PreviewWindow display) but SetBlendShape always returns false → Session uses AssetPathFallback only.
+- [ ] **Abort** (0.2 itself fails): FaceEmo パッケージ構造が想定と完全に異なる。仕様を見直す。
+
+Selected path: ____________________
