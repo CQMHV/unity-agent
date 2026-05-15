@@ -24,6 +24,10 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
             {
                 SpikeGetFacade();
             }
+            if (GUILayout.Button("Spike 0.4: SetBlendShape live preview"))
+            {
+                SpikeSetBlendShape();
+            }
 
             EditorGUILayout.LabelField("Log:", EditorStyles.boldLabel);
             _scroll = EditorGUILayout.BeginScrollView(_scroll, GUILayout.ExpandHeight(true));
@@ -122,6 +126,61 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
 
                 // Optional: also probe presenter
                 // (record in notes if direct field access fails — may need presenter-mediated path)
+            }
+            catch (System.Exception ex)
+            {
+                Log($"FAIL: {ex.GetType().Name}: {ex.InnerException?.Message ?? ex.Message}");
+            }
+#else
+            Log("SKIP: FACE_EMO not defined.");
+#endif
+        }
+
+        private void SpikeSetBlendShape()
+        {
+            Log("--- Spike 0.4 ---");
+#if FACE_EMO
+            var launcher = FaceEmoAPI.FindLauncher();
+            if (launcher == null) { Log("FAIL: No launcher."); return; }
+            if (launcher.AV3Setting == null || launcher.AV3Setting.TargetAvatar == null)
+            { Log("FAIL: AV3Setting/TargetAvatar missing."); return; }
+
+            try
+            {
+                // 1. Open ExpressionEditor with a temp clip
+                var clip = new AnimationClip { name = "SpikeProbeClip" };
+                // Drive via FaceEmo's own launcher: open editor for a new clip
+                var ieeType = System.Type.GetType("Suzuryg.FaceEmo.Detail.ExpressionEditor.IExpressionEditor, jp.suzuryg.face-emo.detail.Editor");
+                var installerType = System.Type.GetType("Suzuryg.FaceEmo.AppMain.FaceEmoInstaller, jp.suzuryg.face-emo.appmain.Editor");
+                var installer = System.Activator.CreateInstance(installerType, new object[] { launcher.gameObject });
+                var container = installerType.GetProperty("Container").GetValue(installer);
+                var resolve = container.GetType().GetMethods()
+                    .FirstOrDefault(m => m.Name == "Resolve" && m.IsGenericMethodDefinition && m.GetParameters().Length == 0);
+                var ee = resolve.MakeGenericMethod(ieeType).Invoke(container, null);
+
+                ieeType.GetMethod("Open").Invoke(ee, new object[] { clip });
+                Log("ExpressionEditor opened with probe clip.");
+
+                // 2. Acquire facade (using field name discovered in 0.3 — placeholder "_model")
+                var facadeField = ee.GetType().GetField("_model", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                               ?? ee.GetType().GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                                      .FirstOrDefault(f => f.FieldType.Name == "ExpressionEditorModelFacade");
+                if (facadeField == null) { Log("FAIL: facade field not found (re-run 0.3)."); return; }
+                var facade = facadeField.GetValue(ee);
+                Log($"Facade acquired: {facade.GetType().FullName}");
+
+                // 3. Find first face blendshape and try SetBlendShapeValue
+                var faceShapesProp = facade.GetType().GetProperty("FaceBlendShapes");
+                var faceShapes = faceShapesProp.GetValue(facade) as System.Collections.IDictionary;
+                if (faceShapes == null || faceShapes.Count == 0) { Log("FAIL: FaceBlendShapes empty."); return; }
+                object firstKey = null;
+                foreach (var k in faceShapes.Keys) { firstKey = k; break; }
+                Log($"Trying SetBlendShapeValue on first shape: {firstKey}");
+
+                var setMethod = facade.GetType().GetMethod("SetBlendShapeValue");
+                setMethod.Invoke(facade, new object[] { firstKey, 100f });
+                Log("OK: SetBlendShapeValue invoked without exception.");
+                Log("→ Manually verify: ExpressionEditor preview shows the shape at 100. Repaint may be needed.");
             }
             catch (System.Exception ex)
             {
