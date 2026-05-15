@@ -30,6 +30,24 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         //  A. Expression Management (6 tools)
         // ═══════════════════════════════════════════
 
+        /// <summary>
+        /// Parse an optional bool argument: empty string => null (unspecified).
+        /// Returns false (and sets error) when the value is non-empty but not a recognized bool.
+        /// </summary>
+        private static bool TryParseOptionalBool(string s, string argName, out bool? value, out string error)
+        {
+            value = null;
+            error = null;
+            if (string.IsNullOrEmpty(s)) return true;
+            if (!ToolUtility.TryParseBool(s, out bool v))
+            {
+                error = $"Error: Invalid bool for {argName}: '{s}'. Use true/false.";
+                return false;
+            }
+            value = v;
+            return true;
+        }
+
         [AgentTool("Add a new expression mode to FaceEmo menu. destination: 'Registered' (default), group name, or 'Unregistered'. animationClipPath: optional asset path to AnimationClip.")]
         public static string AddExpression(string displayName, string destination = "Registered",
             string animationClipPath = "", string gameObjectName = "")
@@ -148,8 +166,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 mouth = mouthTracking.Equals("Animation", StringComparison.OrdinalIgnoreCase)
                     ? MouthTrackingControl.Animation : MouthTrackingControl.Tracking;
 
-            bool? blink = string.IsNullOrEmpty(blinkEnabled) ? (bool?)null : bool.Parse(blinkEnabled);
-            bool? mouthCancel = string.IsNullOrEmpty(mouthMorphCancelerEnabled) ? (bool?)null : bool.Parse(mouthMorphCancelerEnabled);
+            if (!TryParseOptionalBool(blinkEnabled, nameof(blinkEnabled), out bool? blink, out string blinkErr)) return blinkErr;
+            if (!TryParseOptionalBool(mouthMorphCancelerEnabled, nameof(mouthMorphCancelerEnabled), out bool? mouthCancel, out string mouthCancelErr)) return mouthCancelErr;
 
             FaceEmoAPI.ModifyModeProperties(menu, modeId,
                 displayName: string.IsNullOrEmpty(newDisplayName) ? null : newDisplayName,
@@ -391,10 +409,10 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 mouth = mouthTracking.Equals("Animation", StringComparison.OrdinalIgnoreCase)
                     ? MouthTrackingControl.Animation : MouthTrackingControl.Tracking;
 
-            bool? blink = string.IsNullOrEmpty(blinkEnabled) ? (bool?)null : bool.Parse(blinkEnabled);
-            bool? mouthCancel = string.IsNullOrEmpty(mouthMorphCancelerEnabled) ? (bool?)null : bool.Parse(mouthMorphCancelerEnabled);
-            bool? leftTrigger = string.IsNullOrEmpty(isLeftTriggerUsed) ? (bool?)null : bool.Parse(isLeftTriggerUsed);
-            bool? rightTrigger = string.IsNullOrEmpty(isRightTriggerUsed) ? (bool?)null : bool.Parse(isRightTriggerUsed);
+            if (!TryParseOptionalBool(blinkEnabled, nameof(blinkEnabled), out bool? blink, out string blinkErr)) return blinkErr;
+            if (!TryParseOptionalBool(mouthMorphCancelerEnabled, nameof(mouthMorphCancelerEnabled), out bool? mouthCancel, out string mouthCancelErr)) return mouthCancelErr;
+            if (!TryParseOptionalBool(isLeftTriggerUsed, nameof(isLeftTriggerUsed), out bool? leftTrigger, out string leftErr)) return leftErr;
+            if (!TryParseOptionalBool(isRightTriggerUsed, nameof(isRightTriggerUsed), out bool? rightTrigger, out string rightErr)) return rightErr;
 
             FaceEmoAPI.ModifyBranchProperties(menu, modeId, branchIndex,
                 eyeTrackingControl: eye,
@@ -509,14 +527,20 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             var av3 = FaceEmoAPI.GetAV3Setting(launcher);
             Undo.RecordObject(av3, "Configure FaceEmo Generation");
             var changes = new List<string>();
+            var parseErrors = new List<string>();
 
             void SetBool(string propName, string value, string label)
             {
                 if (string.IsNullOrEmpty(value)) return;
+                if (!ToolUtility.TryParseBool(value, out bool v))
+                {
+                    parseErrors.Add($"{label}='{value}'");
+                    return;
+                }
                 var prop = av3SO.FindProperty(propName);
                 if (prop == null) return;
-                prop.boolValue = bool.Parse(value);
-                changes.Add($"{label}={value}");
+                prop.boolValue = v;
+                changes.Add($"{label}={v}");
             }
 
             SetBool("SmoothAnalogFist", smoothAnalogFist, "smoothAnalogFist");
@@ -529,13 +553,22 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
             if (!string.IsNullOrEmpty(transitionDuration))
             {
-                var prop = av3SO.FindProperty("TransitionDurationSeconds");
-                if (prop != null)
+                if (!double.TryParse(transitionDuration, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double td))
+                    parseErrors.Add($"transitionDuration='{transitionDuration}'");
+                else
                 {
-                    prop.doubleValue = double.Parse(transitionDuration);
-                    changes.Add($"transitionDuration={transitionDuration}");
+                    var prop = av3SO.FindProperty("TransitionDurationSeconds");
+                    if (prop != null)
+                    {
+                        prop.doubleValue = td;
+                        changes.Add($"transitionDuration={td}");
+                    }
                 }
             }
+
+            if (parseErrors.Count > 0)
+                return $"Error: Invalid value(s): {string.Join(", ", parseErrors)}. Bools use true/false; transitionDuration is a number. No changes applied.";
 
             av3SO.ApplyModifiedProperties();
             EditorUtility.SetDirty(av3);
@@ -647,8 +680,10 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
             if (!string.IsNullOrEmpty(enableAfk))
             {
+                if (!ToolUtility.TryParseBool(enableAfk, out bool v))
+                    return $"Error: Invalid bool for enableAfk: '{enableAfk}'. Use true/false.";
                 var prop = av3SO.FindProperty("ChangeAfkFace");
-                if (prop != null) { prop.boolValue = bool.Parse(enableAfk); changes.Add($"enableAfk={enableAfk}"); }
+                if (prop != null) { prop.boolValue = v; changes.Add($"enableAfk={v}"); }
             }
 
             void SetClip(string propName, string path, string label)
@@ -719,13 +754,20 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             Undo.RecordObject(FaceEmoAPI.GetAV3Setting(launcher), "Configure Feature Toggles");
             var changes = new List<string>();
 
+            var parseErrors = new List<string>();
+
             void SetToggle(string propName, string value, string label)
             {
                 if (string.IsNullOrEmpty(value)) return;
+                if (!ToolUtility.TryParseBool(value, out bool v))
+                {
+                    parseErrors.Add($"{label}='{value}'");
+                    return;
+                }
                 var prop = av3SO.FindProperty(propName);
                 if (prop == null) return;
-                prop.boolValue = bool.Parse(value);
-                changes.Add($"{label}={value}");
+                prop.boolValue = v;
+                changes.Add($"{label}={v}");
             }
 
             SetToggle("AddConfig_EmoteSelect", emoteSelect, "emoteSelect");
@@ -739,6 +781,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             SetToggle("AddConfig_HandPattern_DisableRight", handPatternDisableRight, "handPatternDisableRight");
             SetToggle("AddConfig_Controller_Quest", controllerQuest, "controllerQuest");
             SetToggle("AddConfig_Controller_Index", controllerIndex, "controllerIndex");
+
+            if (parseErrors.Count > 0)
+                return $"Error: Invalid bool value(s): {string.Join(", ", parseErrors)}. Use true/false. No changes applied.";
 
             av3SO.ApplyModifiedProperties();
             EditorUtility.SetDirty(FaceEmoAPI.GetAV3Setting(launcher));

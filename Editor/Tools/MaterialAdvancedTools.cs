@@ -150,7 +150,7 @@ Use ListMaterialProperties (in TextureEditTools) to discover property names.")]
             return $"Success: Set {propertyName}=({c.r:F2},{c.g:F2},{c.b:F2},{c.a:F2}) on '{mat.name}'.";
         }
 
-        [AgentTool("Set a Vector4 property on a material. value format: 'x,y,z,w'.")]
+        [AgentTool("Set a Vector4 property on a material. value: 'x,y', 'x,y,z', or 'x,y,z,w' — omitted components default to 0.")]
         public static string SetMaterialVector(string materialPath, string propertyName, string value)
         {
             var mat = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
@@ -304,7 +304,11 @@ Same Animator-driven-value semantics as GetRendererInstanceMaterialVector. Play 
             var sharedMat = shareds[materialIndex];
             if (sharedMat == null || !sharedMat.HasProperty(propertyName))
                 return $"Error: Property '{propertyName}' not found.";
-            var inst = renderer.materials[materialIndex];
+            var instancesF = renderer.materials;
+            if (materialIndex >= instancesF.Length)
+                return $"Error: renderer.materials length ({instancesF.Length}) is smaller than materialIndex ({materialIndex}).";
+            var inst = instancesF[materialIndex];
+            if (inst == null) return "Error: instance material is null.";
             float instF = inst.GetFloat(propertyName);
             float sharedF = sharedMat.GetFloat(propertyName);
             var mpb = new MaterialPropertyBlock();
@@ -333,7 +337,11 @@ Same Animator-driven-value semantics as GetRendererInstanceMaterialVector. Play 
             var sharedMat = shareds[materialIndex];
             if (sharedMat == null || !sharedMat.HasProperty(propertyName))
                 return $"Error: Property '{propertyName}' not found.";
-            var inst = renderer.materials[materialIndex];
+            var instancesC = renderer.materials;
+            if (materialIndex >= instancesC.Length)
+                return $"Error: renderer.materials length ({instancesC.Length}) is smaller than materialIndex ({materialIndex}).";
+            var inst = instancesC[materialIndex];
+            if (inst == null) return "Error: instance material is null.";
             Color instC = inst.GetColor(propertyName);
             Color sharedC = sharedMat.GetColor(propertyName);
             var mpb = new MaterialPropertyBlock();
@@ -366,7 +374,11 @@ Same Animator-driven-value semantics as GetRendererInstanceMaterialVector. Play 
             var sharedMat = shareds[materialIndex];
             if (sharedMat == null || !sharedMat.HasProperty(propertyName))
                 return $"Error: Property '{propertyName}' not found.";
-            var inst = renderer.materials[materialIndex];
+            var instancesI = renderer.materials;
+            if (materialIndex >= instancesI.Length)
+                return $"Error: renderer.materials length ({instancesI.Length}) is smaller than materialIndex ({materialIndex}).";
+            var inst = instancesI[materialIndex];
+            if (inst == null) return "Error: instance material is null.";
             int instI = inst.GetInt(propertyName);
             int sharedI = sharedMat.GetInt(propertyName);
             var mpb = new MaterialPropertyBlock();

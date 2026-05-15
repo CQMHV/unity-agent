@@ -139,6 +139,13 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 return $"Error: Collider index {colliderIndex} out of range (0-{colliders.Length - 1}).";
 
             var c = colliders[colliderIndex];
+
+            // A MeshCollider can only be a trigger when convex=true; Unity silently ignores
+            // isTrigger=true on a non-convex MeshCollider. Reject it up front instead of
+            // reporting a success that did nothing.
+            if (isTrigger == 1 && c is MeshCollider mcCheck && !mcCheck.convex)
+                return $"Error: MeshCollider[{colliderIndex}] on '{goName}' is non-convex — isTrigger requires convex=true. Make it convex first, then retry.";
+
             Undo.RecordObject(c, "Configure Collider via Agent");
 
             if (isTrigger >= 0) c.isTrigger = isTrigger != 0;

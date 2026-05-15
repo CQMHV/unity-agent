@@ -143,7 +143,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return $"Inserted {newLines.Length} line(s) into '{assetPath}' at line {(lineNumber == 0 ? "end" : lineNumber.ToString())}. File now has {lines.Count} lines.";
         }
 
-        [AgentTool("Create a C# script with boilerplate (using statements, namespace, class declaration). Provide the class body content. Usage: CreateCSharpScript(\"Assets/Scripts/MyBehaviour.cs\", \"MyBehaviour\", \"void Start() { Debug.Log(\\\"Hello\\\"); }\", \"MonoBehaviour\")")]
+        [AgentTool("Create a C# script with boilerplate (using statements + class declaration; the class is emitted at the GLOBAL namespace — no namespace block is generated). Provide the class body content. Usage: CreateCSharpScript(\"Assets/Scripts/MyBehaviour.cs\", \"MyBehaviour\", \"void Start() { Debug.Log(\\\"Hello\\\"); }\", \"MonoBehaviour\")")]
         public static string CreateCSharpScript(string assetPath, string className, string content, string baseClass = "MonoBehaviour")
         {
             string error = ValidateAssetPath(assetPath);

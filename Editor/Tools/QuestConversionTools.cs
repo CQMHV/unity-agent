@@ -148,20 +148,26 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
             if (!string.IsNullOrEmpty(removeAvatarDynamics))
             {
+                if (!ToolUtility.TryParseBool(removeAvatarDynamics, out bool v))
+                    return $"Error: Invalid bool for removeAvatarDynamics: '{removeAvatarDynamics}'. Use true/false.";
                 var prop = so.FindProperty("removeAvatarDynamics");
-                if (prop != null) { prop.boolValue = bool.Parse(removeAvatarDynamics); changes.Add($"removeAvatarDynamics={removeAvatarDynamics}"); }
+                if (prop != null) { prop.boolValue = v; changes.Add($"removeAvatarDynamics={v}"); }
             }
 
             if (!string.IsNullOrEmpty(removeVertexColor))
             {
+                if (!ToolUtility.TryParseBool(removeVertexColor, out bool v))
+                    return $"Error: Invalid bool for removeVertexColor: '{removeVertexColor}'. Use true/false.";
                 var prop = so.FindProperty("removeVertexColor");
-                if (prop != null) { prop.boolValue = bool.Parse(removeVertexColor); changes.Add($"removeVertexColor={removeVertexColor}"); }
+                if (prop != null) { prop.boolValue = v; changes.Add($"removeVertexColor={v}"); }
             }
 
             if (!string.IsNullOrEmpty(removeExtraMaterialSlots))
             {
+                if (!ToolUtility.TryParseBool(removeExtraMaterialSlots, out bool v))
+                    return $"Error: Invalid bool for removeExtraMaterialSlots: '{removeExtraMaterialSlots}'. Use true/false.";
                 var prop = so.FindProperty("removeExtraMaterialSlots");
-                if (prop != null) { prop.boolValue = bool.Parse(removeExtraMaterialSlots); changes.Add($"removeExtraMaterialSlots={removeExtraMaterialSlots}"); }
+                if (prop != null) { prop.boolValue = v; changes.Add($"removeExtraMaterialSlots={v}"); }
             }
 
             var defaultSettingsProp = so.FindProperty("defaultMaterialConvertSettings");
@@ -169,8 +175,10 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             {
                 if (!string.IsNullOrEmpty(generateQuestTextures))
                 {
+                    if (!ToolUtility.TryParseBool(generateQuestTextures, out bool v))
+                        return $"Error: Invalid bool for generateQuestTextures: '{generateQuestTextures}'. Use true/false.";
                     var prop = defaultSettingsProp.FindPropertyRelative("generateQuestTextures");
-                    if (prop != null) { prop.boolValue = bool.Parse(generateQuestTextures); changes.Add($"generateQuestTextures={generateQuestTextures}"); }
+                    if (prop != null) { prop.boolValue = v; changes.Add($"generateQuestTextures={v}"); }
                 }
                 if (!string.IsNullOrEmpty(maxTextureSize))
                 {

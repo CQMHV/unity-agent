@@ -61,7 +61,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 }
 
                 // Fallback: try menu item
-                EditorApplication.ExecuteMenuItem("Tools/NDM Framework/Manual bake avatar");
+                bool menuResult = EditorApplication.ExecuteMenuItem("Tools/NDM Framework/Manual bake avatar");
+                if (!menuResult)
+                    return "Error: NDMF ProcessAvatar method not found, and the 'Tools/NDM Framework/Manual bake avatar' menu item could not be executed. NDMF may be missing or its API changed.";
                 return $"Success: NDMF manual bake triggered via menu for '{avatarRootName}'.";
             }
             catch (Exception e)

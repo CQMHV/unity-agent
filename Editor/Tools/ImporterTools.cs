@@ -285,8 +285,13 @@ optimizeBones: remove non-connected bones.")]
             bool success = importer.ExtractTextures(outputFolder);
             if (success)
             {
+                // ExtractTextures writes the texture files and updates the importer's external-object
+                // remap, but the model itself must be reimported for it to actually reference the
+                // extracted textures instead of the embedded ones.
                 AssetDatabase.Refresh();
-                return $"Success: Extracted textures from '{modelPath}' to '{outputFolder}'.";
+                AssetDatabase.WriteImportSettingsIfDirty(modelPath);
+                AssetDatabase.ImportAsset(modelPath, ImportAssetOptions.ForceUpdate);
+                return $"Success: Extracted textures from '{modelPath}' to '{outputFolder}' and reimported the model.";
             }
             return $"Info: No textures extracted (may be already extracted or none embedded).";
         }

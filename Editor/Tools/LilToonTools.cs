@@ -224,6 +224,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             Undo.RecordObject(mat, "Set lilToon Color");
             mat.SetColor(propName, new Color(r, g, b, a));
             EditorUtility.SetDirty(mat);
+            AssetDatabase.SaveAssets();
 
             return $"Success: Set {property} color ({propName}) to ({r:F3}, {g:F3}, {b:F3}, {a:F3}) on '{mat.name}'.";
         }
@@ -255,6 +256,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             Undo.RecordObject(mat, "Set lilToon Float");
             mat.SetFloat(propName, value);
             EditorUtility.SetDirty(mat);
+            AssetDatabase.SaveAssets();
 
             return $"Success: Set {propName} to {value:F4} on '{mat.name}'.";
         }
@@ -293,6 +295,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             Undo.RecordObject(mat, "Set lilToon Texture");
             mat.SetTexture(propName, tex);
             EditorUtility.SetDirty(mat);
+            AssetDatabase.SaveAssets();
 
             return $"Success: Set {propName} to '{(tex != null ? texturePath : "(none)")}' on '{mat.name}'.";
         }
@@ -348,6 +351,12 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (string.IsNullOrEmpty(lite))
                 isLite = mat.shader.name.Contains("Lite") || mat.shader.name.Contains("lite");
 
+            // Preserve the tessellation / multi variant of the current shader
+            // (passing these as hardcoded false would silently downgrade Tessellation/Multi materials).
+            bool isTess = mat.shader.name.IndexOf("Tessellation", StringComparison.OrdinalIgnoreCase) >= 0
+                       || mat.shader.name.IndexOf("Tess", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isMulti = mat.shader.name.IndexOf("Multi", StringComparison.OrdinalIgnoreCase) >= 0;
+
             if (!AgentSettings.RequestConfirmation(
                 "lilToon レンダリングモード変更",
                 $"マテリアル: {mat.name}\n" +
@@ -364,7 +373,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (setupMethod != null)
             {
                 // SetupMaterialWithRenderingMode(Material, RenderingMode, TransparentMode, bool isoutl, bool islite, bool istess, bool ismulti)
-                setupMethod.Invoke(null, new object[] { mat, renderingMode, transparentMode, isOutline, isLite, false, false });
+                setupMethod.Invoke(null, new object[] { mat, renderingMode, transparentMode, isOutline, isLite, isTess, isMulti });
             }
             else
             {
@@ -377,10 +386,11 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
 
             EditorUtility.SetDirty(mat);
+            AssetDatabase.SaveAssets();
 
             return $"Success: Changed rendering mode of '{mat.name}' to {mode}.\n" +
                    $"  Shader: {mat.shader.name}\n" +
-                   $"  Outline: {isOutline}, Lite: {isLite}";
+                   $"  Outline: {isOutline}, Lite: {isLite}, Tess: {isTess}, Multi: {isMulti}";
         }
 
         private static string BuildShaderName(string mode, bool outline, bool lite)
@@ -529,6 +539,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             applyMethod.Invoke(null, new object[] { mat, preset, isMulti });
 
             EditorUtility.SetDirty(mat);
+            AssetDatabase.SaveAssets();
 
             return $"Success: Applied preset '{System.IO.Path.GetFileNameWithoutExtension(presetPath)}' to '{mat.name}'.\n" +
                    $"  Current shader: {mat.shader.name}";
@@ -632,6 +643,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 mat.SetFloat(propName, value);
                 EditorUtility.SetDirty(mat);
             }
+            AssetDatabase.SaveAssets();
 
             return $"Success: Set {propName} to {value:F4} on {applicable.Count} lilToon material(s) under '{avatarRootName}'.";
         }
@@ -683,6 +695,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 mat.SetColor(propName, newColor);
                 EditorUtility.SetDirty(mat);
             }
+            AssetDatabase.SaveAssets();
 
             return $"Success: Set {property} color ({propName}) to ({r:F3}, {g:F3}, {b:F3}, {a:F3}) on {applicable.Count} lilToon material(s) under '{avatarRootName}'.";
         }

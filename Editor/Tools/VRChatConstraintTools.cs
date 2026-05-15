@@ -122,7 +122,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return $"Success: Added source '{sourceName}' at index [{newIndex}] to VRC{type}Constraint on '{gameObjectName}'.";
         }
 
-        [AgentTool("Configure a VRC Constraint. Set weight, active state, freeze axes. freezeAxes: comma-separated 'X,Y,Z' to affect. Use -999 for unchanged floats.")]
+        [AgentTool("Configure a VRC Constraint. Set weight, active state, freeze axes. freezeAxes: comma-separated 'X,Y,Z' to affect. Use -999 for unchanged floats. NOTE: 'active' sets BOTH IsActive AND Locked to the same value (this mirrors the VRChat inspector's Activate button — Locked bakes the current offset).")]
         public static string ConfigureVRCConstraint(string gameObjectName, string type,
             float weight = -999f, int active = -1, string freezeAxes = "")
         {

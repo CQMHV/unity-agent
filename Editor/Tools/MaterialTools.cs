@@ -59,7 +59,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return $"Success: Created material '{name}' (shader: {shader.name}) at '{path}'.";
         }
 
-        [AgentTool("Set the color of a GameObject's material. Color values are 0-1. If the object uses the default material, a new material is created automatically.")]
+        [AgentTool("Set the color of a GameObject's material. Color values are 0-1. Edits the renderer's SHARED material asset in-place, so every renderer referencing that material is affected. If the object uses the default material, a new material is created automatically.")]
         public static string SetMaterialColor(string gameObjectName, float r, float g, float b, float a = 1.0f)
         {
             var go = FindGO(gameObjectName);

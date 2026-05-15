@@ -84,7 +84,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             // Make sure path ends with .prefab
             if (!savePath.EndsWith(".prefab")) savePath += ".prefab";
 
-            PrefabUtility.SaveAsPrefabAssetAndConnect(go, savePath, InteractionMode.UserAction);
+            PrefabUtility.SaveAsPrefabAssetAndConnect(go, savePath, InteractionMode.UserAction, out bool success);
+            if (!success)
+                return $"Error: Failed to save '{gameObjectName}' as prefab at '{savePath}'. Check the path is under Assets/ and writable.";
             return $"Success: Saved '{gameObjectName}' as prefab at '{savePath}'.";
         }
 
@@ -220,10 +222,19 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 }
             }
 
-            // Instantiate, save as variant, then destroy
+            // Instantiate, save as variant, then destroy. The temp instance must be
+            // destroyed even if SaveAsPrefabAsset throws, or it leaks into the open scene.
             var instance = PrefabUtility.InstantiatePrefab(basePrefab) as GameObject;
-            var variant = PrefabUtility.SaveAsPrefabAsset(instance, variantPath);
-            Object.DestroyImmediate(instance);
+            GameObject variant;
+            try
+            {
+                variant = PrefabUtility.SaveAsPrefabAsset(instance, variantPath, out bool success);
+                if (!success) variant = null;
+            }
+            finally
+            {
+                if (instance != null) Object.DestroyImmediate(instance);
+            }
 
             return variant != null
                 ? $"Success: Created prefab variant at '{variantPath}' based on '{basePrefabPath}'."

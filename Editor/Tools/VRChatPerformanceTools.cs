@@ -144,8 +144,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             worstRankIdx = Math.Max(worstRankIdx, RankToIndex(matSlotRank));
 
             // === Bones ===
-            var allTransforms = go.GetComponentsInChildren<Transform>(true);
-            // Count bones: transforms that are referenced by SkinnedMeshRenderers
+            // Count bones the way VRChat's stats do: distinct transforms referenced by
+            // SkinnedMeshRenderers. Do NOT fall back to the full transform hierarchy count —
+            // that wildly overestimates (it would count every empty/prop transform as a bone).
             var boneSet = new HashSet<Transform>();
             foreach (var smr in skinnedRenderers)
             {
@@ -153,7 +154,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                     foreach (var bone in smr.bones)
                         if (bone != null) boneSet.Add(bone);
             }
-            int boneCount = boneSet.Count > 0 ? boneSet.Count : allTransforms.Length;
+            int boneCount = boneSet.Count;
             string boneRank = GetRank(boneCount, BoneThresholds);
             sb.AppendLine($"  Bones: {boneCount} [{boneRank}]");
             worstRankIdx = Math.Max(worstRankIdx, RankToIndex(boneRank));

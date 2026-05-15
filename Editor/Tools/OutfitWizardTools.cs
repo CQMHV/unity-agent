@@ -168,6 +168,14 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
 #endif
 
+#if !VRCFURY
+            if (toggleMethod == "vrcfury")
+            {
+                result.AppendLine($"  [{step}] Warning: toggleMethod='vrcfury' but VRCFury is not installed (VRCFURY not defined). Falling back to MA-based toggle.");
+                toggleMethod = "ma";
+            }
+#endif
+
             if (!toggleCreated && (toggleMethod == "auto" || toggleMethod == "ma"))
             {
                 // Fallback: use VRChatTools.SetupObjectToggle approach via MA
@@ -222,7 +230,12 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 #endif
 
             result.AppendLine();
-            result.AppendLine($"Done! Outfit '{outfitName}' is set up.");
+            // Don't claim an unqualified "Done!" when individual steps emitted warnings —
+            // the outfit may be only partially set up.
+            if (result.ToString().Contains("Warning:"))
+                result.AppendLine($"Completed with warnings — outfit '{outfitName}' is set up, but review the 'Warning:' lines above.");
+            else
+                result.AppendLine($"Done! Outfit '{outfitName}' is set up.");
 
             return result.ToString().TrimEnd();
         }

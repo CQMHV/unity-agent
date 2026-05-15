@@ -213,7 +213,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return sb.ToString().TrimEnd();
         }
 
-        [AgentTool("Move a root GameObject from one loaded scene to another. Useful for organizing objects across additive scenes.")]
+        [AgentTool("Move a root GameObject from one loaded scene to another. Useful for organizing objects across additive scenes. NOTE: the scene move is NOT undoable (Unity provides no Undo API for SceneManager.MoveGameObjectToScene) — move it back manually if needed.")]
         public static string MoveToScene(string gameObjectName, string targetSceneName)
         {
             var go = FindGO(gameObjectName);
@@ -229,9 +229,14 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 {
                     if (!scene.isLoaded) return $"Error: Scene '{targetSceneName}' is not loaded.";
 
-                    Undo.RecordObject(go, "Move to Scene");
+                    var fromScene = go.scene;
+                    // Note: SceneManager.MoveGameObjectToScene is NOT undoable — Undo.RecordObject does
+                    // not capture scene membership, so calling it here would only give a false sense
+                    // of undoability. Mark both scenes dirty instead so the change is saved.
                     SceneManager.MoveGameObjectToScene(go, scene);
-                    return $"Success: Moved '{gameObjectName}' to scene '{targetSceneName}'.";
+                    if (fromScene.IsValid()) EditorSceneManager.MarkSceneDirty(fromScene);
+                    EditorSceneManager.MarkSceneDirty(scene);
+                    return $"Success: Moved '{gameObjectName}' to scene '{targetSceneName}'. (Not undoable — move it back manually if needed.)";
                 }
             }
 

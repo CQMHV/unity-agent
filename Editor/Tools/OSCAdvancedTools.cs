@@ -576,15 +576,19 @@ Requires confirmation.")]
             FindOrAddAnimatorParam(fxController, payloadParam, AnimatorControllerParameterType.Float);
 
             // Ensure expression parameters (synced for index and payload)
-            EnsureExpressionParameter(avatarRootName, indexParam, 0, true, false, 0f, out _);  // Int, Synced
-            EnsureExpressionParameter(avatarRootName, payloadParam, 1, true, false, 0f, out _); // Float, Synced
+            var paramFailures = new List<string>();
+            if (!EnsureExpressionParameter(avatarRootName, indexParam, 0, true, false, 0f, out string indexErr))
+                paramFailures.Add($"{indexParam} (index): {indexErr}");
+            if (!EnsureExpressionParameter(avatarRootName, payloadParam, 1, true, false, 0f, out string payloadErr))
+                paramFailures.Add($"{payloadParam} (payload): {payloadErr}");
 
             // Create target parameters (all Local)
             for (int i = 0; i < count; i++)
             {
                 string targetName = $"{targetParamPrefix}_{i}";
                 FindOrAddAnimatorParam(fxController, targetName, AnimatorControllerParameterType.Float);
-                EnsureExpressionParameter(avatarRootName, targetName, 1, false, false, 0f, out _);
+                if (!EnsureExpressionParameter(avatarRootName, targetName, 1, false, false, 0f, out string targetErr))
+                    paramFailures.Add($"{targetName}: {targetErr}");
             }
 
             // Create layer
@@ -651,12 +655,22 @@ Requires confirmation.")]
             AssetDatabase.SaveAssets();
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Success: Created multiplex receiver '{layerName}' with {count} channels.");
+            bool partial = paramFailures.Count > 0;
+            sb.AppendLine(partial
+                ? $"Partial: Created multiplex receiver '{layerName}' layer, but {paramFailures.Count} expression parameter(s) could not be registered."
+                : $"Success: Created multiplex receiver '{layerName}' with {count} channels.");
             sb.AppendLine($"  Index: {indexParam} (Int, Synced, 8bit)");
             sb.AppendLine($"  Payload: {payloadParam} (Float, Synced, 8bit)");
             sb.AppendLine($"  Targets: {targetParamPrefix}_0 ~ {targetParamPrefix}_{count - 1} (Float, Local)");
             sb.AppendLine($"  Total budget cost: 16 bits");
             sb.AppendLine($"  Effective channels: {count} (vs {count * 8} bits if individually synced)");
+            if (partial)
+            {
+                sb.AppendLine();
+                sb.AppendLine("  [WARN] Expression parameter failures (the animator layer was still created):");
+                foreach (var f in paramFailures)
+                    sb.AppendLine($"    - {f}");
+            }
             sb.AppendLine();
             sb.AppendLine("Usage: Set index to the target channel, then update payload with the value.");
             sb.AppendLine("The state machine copies payload to the selected target parameter.");

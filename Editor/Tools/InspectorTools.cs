@@ -316,18 +316,26 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (sourceComp == null) return $"Error: Component '{componentType}' not found on '{sourceGoName}'.";
 
             // Use UnityEditorInternal for component copying
-            UnityEditorInternal.ComponentUtility.CopyComponent(sourceComp);
+            if (!UnityEditorInternal.ComponentUtility.CopyComponent(sourceComp))
+                return $"Error: Failed to copy '{componentType}' from '{sourceGoName}'.";
 
             var existing = targetGo.GetComponent(type);
             if (existing != null)
             {
                 Undo.RecordObject(existing, "Paste Component Values via Agent");
-                UnityEditorInternal.ComponentUtility.PasteComponentValues(existing);
+                if (!UnityEditorInternal.ComponentUtility.PasteComponentValues(existing))
+                    return $"Error: Failed to paste '{componentType}' values onto '{targetGoName}'.";
                 return $"Success: Pasted '{componentType}' values from '{sourceGoName}' to '{targetGoName}' (existing component updated).";
             }
             else
             {
-                UnityEditorInternal.ComponentUtility.PasteComponentAsNew(targetGo);
+                if (!UnityEditorInternal.ComponentUtility.PasteComponentAsNew(targetGo))
+                    return $"Error: Failed to paste '{componentType}' as a new component onto '{targetGoName}'.";
+                // PasteComponentAsNew does not register an Undo step — register the newly added component
+                // so the operation is undoable.
+                var added = targetGo.GetComponent(type);
+                if (added != null)
+                    Undo.RegisterCreatedObjectUndo(added, "Copy Component via Agent");
                 return $"Success: Copied '{componentType}' from '{sourceGoName}' to '{targetGoName}' (new component added).";
             }
         }

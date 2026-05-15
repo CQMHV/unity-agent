@@ -43,14 +43,15 @@ friction: collision friction.")]
         [AgentTool(@"Configure Cloth physics parameters.
 stretchingStiffness/bendingStiffness: 0-1 resistance. damping: 0-1 motion damping.
 friction: collision friction. collisionMassScale: mass increase on collision.
-useGravity: apply gravity. useTethers: anchor constraints. useVirtualParticles: stability.
+useGravity: apply gravity. useTethers: anchor constraints.
+useVirtualParticles: 0-1 weight — virtual particles added per triangle for collision stability (this is a float weight, not an on/off flag).
 selfCollisionDistance: min self-collision distance. selfCollisionStiffness: self-collision force.
 clothSolverFrequency: solver iterations/sec (higher=more accurate but slower).
 worldVelocityScale/worldAccelerationScale: 0-1, influence of character movement.
 externalAcceleration: constant force 'x,y,z'. randomAcceleration: random force 'x,y,z'.")]
         public static string ConfigureCloth(string goName, float stretchingStiffness = -1f, float bendingStiffness = -1f,
             float damping = -1f, float friction = -1f, float collisionMassScale = -1f,
-            int useGravity = -1, int useTethers = -1, int useVirtualParticles = -1,
+            int useGravity = -1, int useTethers = -1, float useVirtualParticles = -1f,
             float selfCollisionDistance = -1f, float selfCollisionStiffness = -1f,
             float clothSolverFrequency = -1f, float worldVelocityScale = -1f, float worldAccelerationScale = -1f,
             string externalAcceleration = "", string randomAcceleration = "")
@@ -149,6 +150,7 @@ capsuleColliderPaths: semicolon-separated GameObjects with CapsuleCollider.")]
 
             Undo.RecordObject(cloth, "Set Cloth Colliders");
             int count = 0;
+            var failures = new System.Collections.Generic.List<string>();
 
             if (!string.IsNullOrEmpty(sphereColliderPaths))
             {
@@ -156,17 +158,22 @@ capsuleColliderPaths: semicolon-separated GameObjects with CapsuleCollider.")]
                 var entries = sphereColliderPaths.Split(';');
                 foreach (var entry in entries)
                 {
+                    if (string.IsNullOrWhiteSpace(entry)) continue;
                     var parts = entry.Trim().Split(',');
                     SphereCollider s1 = null, s2 = null;
                     if (parts.Length >= 1)
                     {
-                        var g1 = FindGO(parts[0].Trim());
-                        if (g1 != null) s1 = g1.GetComponent<SphereCollider>();
+                        var p1 = parts[0].Trim();
+                        var g1 = FindGO(p1);
+                        if (g1 == null) failures.Add($"sphere '{p1}': GameObject not found");
+                        else { s1 = g1.GetComponent<SphereCollider>(); if (s1 == null) failures.Add($"sphere '{p1}': no SphereCollider"); }
                     }
                     if (parts.Length >= 2)
                     {
-                        var g2 = FindGO(parts[1].Trim());
-                        if (g2 != null) s2 = g2.GetComponent<SphereCollider>();
+                        var p2 = parts[1].Trim();
+                        var g2 = FindGO(p2);
+                        if (g2 == null) failures.Add($"sphere '{p2}': GameObject not found");
+                        else { s2 = g2.GetComponent<SphereCollider>(); if (s2 == null) failures.Add($"sphere '{p2}': no SphereCollider"); }
                     }
                     if (s1 != null) pairs.Add(new ClothSphereColliderPair(s1, s2));
                 }
@@ -180,18 +187,22 @@ capsuleColliderPaths: semicolon-separated GameObjects with CapsuleCollider.")]
                 var entries = capsuleColliderPaths.Split(';');
                 foreach (var entry in entries)
                 {
-                    var g = FindGO(entry.Trim());
-                    if (g != null)
-                    {
-                        var c = g.GetComponent<CapsuleCollider>();
-                        if (c != null) capsules.Add(c);
-                    }
+                    if (string.IsNullOrWhiteSpace(entry)) continue;
+                    var path = entry.Trim();
+                    var g = FindGO(path);
+                    if (g == null) { failures.Add($"capsule '{path}': GameObject not found"); continue; }
+                    var c = g.GetComponent<CapsuleCollider>();
+                    if (c == null) { failures.Add($"capsule '{path}': no CapsuleCollider"); continue; }
+                    capsules.Add(c);
                 }
                 cloth.capsuleColliders = capsules.ToArray();
                 count += capsules.Count;
             }
 
             EditorUtility.SetDirty(cloth);
+            if (failures.Count > 0)
+                return $"Partial: Set {count} collider(s) on Cloth of '{goName}'. {failures.Count} entry(ies) skipped:\n  - "
+                     + string.Join("\n  - ", failures);
             return $"Success: Set {count} colliders on Cloth of '{goName}'.";
         }
 

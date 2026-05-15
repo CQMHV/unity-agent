@@ -18,8 +18,11 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         [AgentTool(@"Add a LODGroup to a GameObject and configure LOD levels.
 screenHeights: semicolon-separated screen relative transition heights (0-1), from highest LOD to lowest.
   Example: '0.6;0.3;0.1' means LOD0 at >60%, LOD1 at 30-60%, LOD2 at 10-30%, culled at <10%.
-Each LOD level uses the Renderers from child GameObjects named 'LOD0', 'LOD1', etc. if they exist,
-otherwise the first Renderer found on the target.")]
+Renderer assignment per level: each level i uses the Renderers under a child GameObject named 'LOD{i}'
+('LOD0', 'LOD1', ...) when that child exists. Fallback when no such child exists:
+  - LOD0  -> ALL Renderers under the target (recursive).
+  - LOD1+ -> NO Renderers (empty level — it will render nothing). Create 'LOD1'/'LOD2'/... children
+    first, or assign renderers afterward with ConfigureLODGroup.")]
         public static string AddLODGroup(string goName, string screenHeights = "0.6;0.3;0.1")
         {
             var go = FindGO(goName);

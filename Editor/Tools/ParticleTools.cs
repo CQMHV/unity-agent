@@ -195,7 +195,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return $"Success: Configured ParticleSystemRenderer on '{goName}'.";
         }
 
-        [AgentTool("Add a burst to the Emission module. time is in seconds, count is number of particles.")]
+        [AgentTool("Add a burst to the Emission module. time is in seconds, count is number of particles (1-32767 — ParticleSystem.Burst stores count as a short).")]
         public static string AddParticleBurst(string goName, float time = 0f, int count = 10, int cycles = 1, float interval = 0.01f)
         {
             var go = FindGO(goName);
@@ -203,6 +203,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
             var ps = go.GetComponent<ParticleSystem>();
             if (ps == null) return $"Error: No ParticleSystem on '{goName}'.";
+
+            if (count < 1 || count > short.MaxValue)
+                return $"Error: count must be 1-{short.MaxValue} (ParticleSystem.Burst stores it as a short — larger values would silently overflow). Got {count}.";
 
             var emission = ps.emission;
             var burst = new ParticleSystem.Burst(time, (short)count, (short)count, cycles, interval);
