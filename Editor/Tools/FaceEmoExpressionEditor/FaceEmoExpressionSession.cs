@@ -132,7 +132,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
             return session;
         }
 
-        public static FaceEmoExpressionSession OpenForNewExpression(string displayName, string animSavePath, string gameObjectName = "", string avatarRootName = "")
+        public static FaceEmoExpressionSession OpenForNewExpression(string displayName, string animSavePath, string gameObjectName = "", string avatarRootName = "", SessionEditMode editMode = SessionEditMode.NewMode)
         {
             // Prefer explicit launcher name; otherwise use avatar-aware lookup if avatarRootName given.
             FaceEmoGate.Result gate;
@@ -178,7 +178,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools.FaceEmoExpressionEditor
                 session.Mode = SyncMode.Degraded;
             }
 
-            session.EditMode = SessionEditMode.NewMode;
+            session.EditMode = editMode;
             session.LauncherSnapshot = gate.Launcher?.gameObject?.name;
             _active = session;
             // Post-open sweep: FaceEmo's TryOpen path occasionally leaves an extra hidden
