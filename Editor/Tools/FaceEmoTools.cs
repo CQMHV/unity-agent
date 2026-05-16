@@ -736,12 +736,22 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (defaultSelProp != null)
                 sb.AppendLine($"  Default Selection: \"{defaultSelProp.GetValue(menu)}\"");
 
-            // Registered
+            // Registered (capped at 7 — FaceEmo's RegisteredId)
             var registeredProp = menuType.GetProperty("Registered");
             if (registeredProp != null)
             {
                 var registered = registeredProp.GetValue(menu);
                 DumpDomainMenuItemList(registered, sb, "Registered");
+            }
+
+            // Unregistered (unlimited — overflow from Registered cap, or explicit user choice).
+            // Without this, Modes added via Session.Commit when Registered is full silently
+            // appear "missing" because the listing ignores Unregistered.
+            var unregisteredProp = menuType.GetProperty("Unregistered");
+            if (unregisteredProp != null)
+            {
+                var unregistered = unregisteredProp.GetValue(menu);
+                DumpDomainMenuItemList(unregistered, sb, "Unregistered");
             }
         }
 

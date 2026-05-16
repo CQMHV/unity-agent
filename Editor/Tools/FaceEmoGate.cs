@@ -69,5 +69,41 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return result;
 #endif
         }
+
+        /// <summary>
+        /// avatar-aware variant: prefer the launcher whose TargetAvatar matches `avatarRootName`.
+        /// Falls back to plain auto-find if no launcher targets that avatar (and emits an Error
+        /// telling the AI to ConfigureTargetAvatar for that avatar first).
+        /// Use this from tools that already know which avatar they are operating on
+        /// (SetExpressionPreviewMulti, SuggestExpressionShapes, etc.) so the resulting Session
+        /// commits to the right launcher.
+        /// </summary>
+        public static Result RequireExpressionEditingReadyForAvatar(string avatarRootName)
+        {
+            var result = new Result();
+#if !FACE_EMO
+            result.Ok = false;
+            result.ErrorMessage = "Error: FaceEmo (jp.suzuryg.face-emo) is not installed. " +
+                "Expression editing is only available with FaceEmo. Install FaceEmo via VCC, then retry.";
+            return result;
+#else
+            if (string.IsNullOrEmpty(avatarRootName))
+                return RequireExpressionEditingReady();
+
+            var launcher = FaceEmoAPI.FindLauncherForAvatar(avatarRootName);
+            if (launcher == null)
+            {
+                result.Ok = false;
+                result.ErrorMessage = $"Error: No FaceEmo launcher in scene targets avatar '{avatarRootName}'. " +
+                    "Run ExecuteMenu('FaceEmo/New Menu') to create one, then " +
+                    $"ConfigureTargetAvatar('{avatarRootName}', '<faceEmoObjectName>').";
+                return result;
+            }
+            // launcher has TargetAvatar by construction of FindLauncherForAvatar.
+            result.Ok = true;
+            result.Launcher = launcher;
+            return result;
+#endif
+        }
     }
 }
