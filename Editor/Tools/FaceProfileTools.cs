@@ -86,8 +86,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (string.IsNullOrWhiteSpace(intent))
                 return "Error: intent is empty (try 'smile', 'angry', 'surprised', or a Japanese keyword like '笑顔').";
 
-            // FaceEmo Gate
-            var gate = FaceEmoGate.RequireExpressionEditingReady();
+            // FaceEmo Gate — avatar-aware so the picked launcher targets this avatar
+            // (not the first arbitrary configured launcher in scene root order).
+            var gate = FaceEmoGate.RequireExpressionEditingReadyForAvatar(avatarRootName);
             if (!gate.Ok) return gate.ErrorMessage;
 
             var profile = LoadOrBuild(avatarRootName, out string err);
@@ -182,8 +183,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             }
 
 #if FACE_EMO
-            // FaceEmo Gate
-            var gate = FaceEmoGate.RequireExpressionEditingReady();
+            // FaceEmo Gate — avatar-aware so the picked launcher targets this avatar.
+            var gate = FaceEmoGate.RequireExpressionEditingReadyForAvatar(avatarRootName);
             if (!gate.Ok) return gate.ErrorMessage;
 
             // Get or create ambient session
@@ -192,7 +193,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (session == null)
             {
                 string tmpPath = $"Assets/UnityAgent/Expressions/{System.IO.Path.GetRandomFileName().Replace(".","")}.anim";
-                session = FaceEmoExpressionEditor.FaceEmoExpressionSession.OpenForNewExpression(null, tmpPath);
+                // Pass the avatar-resolved launcher's GameObject name so the new session
+                // commits to the right launcher (not the first arbitrary auto-find result).
+                session = FaceEmoExpressionEditor.FaceEmoExpressionSession.OpenForNewExpression(null, tmpPath, gate.Launcher.gameObject.name);
                 autoSession = true;
             }
 

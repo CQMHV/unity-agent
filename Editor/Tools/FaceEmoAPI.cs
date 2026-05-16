@@ -198,6 +198,25 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
         }
 
         /// <summary>
+        /// Find the FaceEmo launcher whose TargetAvatar matches the given avatar GameObject name.
+        /// Used by tools that take avatarRootName but no explicit launcher name — without this,
+        /// auto-find returns the first configured launcher in scene root order, which may belong
+        /// to a different avatar entirely.
+        /// </summary>
+        /// <param name="avatarRootName">VRC avatar root GameObject name to match.</param>
+        /// <returns>The launcher targeting this avatar, or null if none found.</returns>
+        public static FaceEmoLauncherComponent FindLauncherForAvatar(string avatarRootName)
+        {
+            if (string.IsNullOrEmpty(avatarRootName)) return null;
+            foreach (var c in Object.FindObjectsOfType<FaceEmoLauncherComponent>())
+            {
+                if (c.AV3Setting == null || c.AV3Setting.TargetAvatar == null) continue;
+                if (c.AV3Setting.TargetAvatar.gameObject.name == avatarRootName) return c;
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Hint message when launcher is not found, listing available FaceEmo objects in scene.
         /// </summary>
         public static string GetLauncherHint()
