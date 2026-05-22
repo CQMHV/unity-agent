@@ -23,6 +23,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
         public bool SupportsSearch;
         public bool SupportsStreaming;
         public bool IsDeprecated;
+        /// <summary>このモデルを設定 UI のドロップダウンに表示するプロバイダー一覧。null = 表示しない（性能照会のみ）。</summary>
+        public LLMProviderType[] Dropdowns;
 
         public ModelCapability() { }
 
@@ -30,7 +32,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
             int inputTokenLimit, int outputTokenLimit,
             bool supportsThinking, int thinkingBudgetMin, int thinkingBudgetMax,
             bool supportsImageInput, bool supportsSearch = false,
-            bool supportsStreaming = true, bool isDeprecated = false)
+            bool supportsStreaming = true, bool isDeprecated = false,
+            LLMProviderType[] dropdowns = null)
         {
             ModelId = modelId;
             DisplayName = displayName;
@@ -43,6 +46,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
             SupportsSearch = supportsSearch;
             SupportsStreaming = supportsStreaming;
             IsDeprecated = isDeprecated;
+            Dropdowns = dropdowns;
         }
     }
 
@@ -54,8 +58,18 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
     {
         // ─── Static + Dynamic data ───
 
-        static readonly Dictionary<string, ModelCapability> StaticModels = BuildStaticModels();
+        /// <summary>登録順を保持するモデル一覧。ドロップダウンの並び順 = この順序。</summary>
+        static readonly List<ModelCapability> StaticModelList = BuildStaticModels();
+        /// <summary>ModelId → ModelCapability の索引（StaticModelList から導出）。</summary>
+        static readonly Dictionary<string, ModelCapability> StaticModels = BuildIndex(StaticModelList);
         static Dictionary<string, ModelCapability> DynamicModels;
+
+        static Dictionary<string, ModelCapability> BuildIndex(List<ModelCapability> list)
+        {
+            var d = new Dictionary<string, ModelCapability>();
+            foreach (var m in list) d[m.ModelId] = m;
+            return d;
+        }
 
         public static bool HasDynamicGeminiModels => DynamicModels != null && DynamicModels.Count > 0;
 
@@ -104,8 +118,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
         /// </summary>
         public static IEnumerable<ModelCapability> GetAllModels()
         {
-            foreach (var kv in StaticModels)
-                yield return kv.Value;
+            foreach (var m in StaticModelList)
+                yield return m;
             if (DynamicModels != null)
             {
                 foreach (var kv in DynamicModels)
@@ -114,6 +128,37 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                         yield return kv.Value;
                 }
             }
+        }
+
+        /// <summary>
+        /// 指定プロバイダーの設定 UI ドロップダウンに表示するモデルを登録順で返す。
+        /// ids[i] と labels[i] は添字対応。ラベルは "DisplayName  (modelId)" 形式で生成する。
+        /// </summary>
+        public static (string[] ids, string[] labels) GetDropdownModels(LLMProviderType provider)
+        {
+            var ids = new List<string>();
+            var labels = new List<string>();
+            foreach (var m in StaticModelList)
+            {
+                if (m.Dropdowns == null) continue;
+                bool match = false;
+                foreach (var p in m.Dropdowns)
+                    if (p == provider) { match = true; break; }
+                if (!match) continue;
+                ids.Add(m.ModelId);
+                labels.Add($"{m.DisplayName}  ({m.ModelId})");
+            }
+            return (ids.ToArray(), labels.ToArray());
+        }
+
+        /// <summary>
+        /// 静的 / 動的データに登録されているモデルを返す。未登録なら null（推定フォールバックなし）。
+        /// </summary>
+        public static ModelCapability GetRegistered(string modelId)
+        {
+            if (string.IsNullOrEmpty(modelId)) return null;
+            if (DynamicModels != null && DynamicModels.TryGetValue(modelId, out var dyn)) return dyn;
+            return StaticModels.TryGetValue(modelId, out var stat) ? stat : null;
         }
 
         // ─── Pattern inference for custom/unknown models ───
@@ -390,19 +435,33 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
 
         // ─── Static model data ───
 
-        static Dictionary<string, ModelCapability> BuildStaticModels()
+        static List<ModelCapability> BuildStaticModels()
         {
-            var d = new Dictionary<string, ModelCapability>();
+            var d = new List<ModelCapability>();
+
+            // プロバイダー → ドロップダウン所属の略記（同一インスタンスを複数行で共有してよい）
+            LLMProviderType[] gem    = { LLMProviderType.Gemini, LLMProviderType.Vertex_AI };
+            LLMProviderType[] gemCli = { LLMProviderType.Gemini, LLMProviderType.Vertex_AI, LLMProviderType.Gemini_CLI };
+            LLMProviderType[] claude = { LLMProviderType.Claude_API, LLMProviderType.Claude_CLI };
+            LLMProviderType[] oa     = { LLMProviderType.OpenAI };
+            LLMProviderType[] oaCdx  = { LLMProviderType.OpenAI, LLMProviderType.Codex_CLI };
+            LLMProviderType[] cdx    = { LLMProviderType.Codex_CLI };
+            LLMProviderType[] ds     = { LLMProviderType.DeepSeek };
+            LLMProviderType[] grok   = { LLMProviderType.xAI_Grok };
+            LLMProviderType[] groq   = { LLMProviderType.Groq };
+            LLMProviderType[] olla   = { LLMProviderType.Ollama };
+            LLMProviderType[] mist   = { LLMProviderType.Mistral };
+            LLMProviderType[] pplx   = { LLMProviderType.Perplexity };
 
             // ── Gemini ──
             // 思考バジェット範囲は公式ドキュメント準拠: ai.google.dev/gemini-api/docs/thinking
-            // search=true: Google Search Grounding 対応
+            // search=true: Google Search Grounding 対応 / dropdowns: 設定 UI のどのドロップダウンに出すか
             Reg(d, "gemini-2.5-flash", "Gemini 2.5 Flash",
-                1048576, 65536, true, 0, 24576, true, search: true);
+                1048576, 65536, true, 0, 24576, true, search: true, dropdowns: gemCli);
             Reg(d, "gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite",
-                1048576, 65536, true, 512, 24576, true, search: true);
+                1048576, 65536, true, 512, 24576, true, search: true, dropdowns: gem);
             Reg(d, "gemini-2.5-pro", "Gemini 2.5 Pro",
-                1048576, 65536, true, 128, 32768, true, search: true);
+                1048576, 65536, true, 128, 32768, true, search: true, dropdowns: gemCli);
             Reg(d, "gemini-2.0-flash", "Gemini 2.0 Flash",
                 1048576, 8192, false, 0, 0, true, search: true, deprecated: true);
             Reg(d, "gemini-2.0-flash-lite", "Gemini 2.0 Flash Lite",
@@ -413,19 +472,19 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 2097152, 8192, false, 0, 0, true, search: true);
             // Gemini 3 系は thinkingLevel (effort) 推奨 → ThinkingBudgetMax=0 で Effort UI を表示
             Reg(d, "gemini-3-flash-preview", "Gemini 3 Flash Preview",
-                1048576, 65536, true, 0, 0, true, search: true);
+                1048576, 65536, true, 0, 0, true, search: true, dropdowns: gemCli);
             Reg(d, "gemini-3-pro-preview", "Gemini 3 Pro Preview",
                 1048576, 65536, true, 0, 0, true, search: true, deprecated: true);
             Reg(d, "gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview",
-                1048576, 65536, true, 0, 0, true, search: true);
+                1048576, 65536, true, 0, 0, true, search: true, dropdowns: gem);
 
-            // ── Claude ──
+            // ── Claude ── (ドロップダウンは最新3モデルのみ。旧モデルは性能照会用に登録)
             Reg(d, "claude-opus-4-6", "Claude Opus 4.6",
-                200000, 128000, true, 1024, 128000, true);
+                200000, 128000, true, 1024, 128000, true, dropdowns: claude);
             Reg(d, "claude-sonnet-4-6", "Claude Sonnet 4.6",
-                200000, 64000, true, 1024, 128000, true);
+                200000, 64000, true, 1024, 128000, true, dropdowns: claude);
             Reg(d, "claude-haiku-4-5-20251001", "Claude Haiku 4.5",
-                200000, 64000, true, 1024, 128000, true);
+                200000, 64000, true, 1024, 128000, true, dropdowns: claude);
             Reg(d, "claude-sonnet-4-5-20250929", "Claude Sonnet 4.5",
                 200000, 64000, true, 1024, 128000, true);
             Reg(d, "claude-opus-4-5-20251101", "Claude Opus 4.5",
@@ -437,129 +496,140 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
             Reg(d, "claude-opus-4-20250514", "Claude Opus 4",
                 200000, 32000, true, 1024, 128000, true);
 
+            // ── Codex CLI 専用モデル ── (Codex CLI ドロップダウンの先頭グループ)
+            Reg(d, "gpt-5.3-codex", "GPT-5.3 Codex",
+                200000, 16384, true, 0, 0, false, dropdowns: cdx);
+            Reg(d, "gpt-5.2-codex", "GPT-5.2 Codex",
+                200000, 16384, true, 0, 0, false, dropdowns: cdx);
+            Reg(d, "gpt-5.1-codex-max", "GPT-5.1 Codex Max",
+                200000, 32768, true, 0, 0, false, dropdowns: cdx);
+            Reg(d, "gpt-5.1-codex-mini", "GPT-5.1 Codex Mini",
+                200000, 16384, true, 0, 0, false, dropdowns: cdx);
+            Reg(d, "codex-mini", "Codex Mini",
+                200000, 16384, true, 0, 0, false, dropdowns: cdx);
+
             // ── OpenAI ──
+            Reg(d, "gpt-5.4", "GPT-5.4",
+                400000, 128000, true, 0, 0, true, dropdowns: oa);
             Reg(d, "gpt-4.1", "GPT-4.1",
-                1048576, 32768, false, 0, 0, true);
+                1048576, 32768, false, 0, 0, true, dropdowns: oaCdx);
             Reg(d, "gpt-4.1-mini", "GPT-4.1 Mini",
-                1048576, 32768, false, 0, 0, true);
+                1048576, 32768, false, 0, 0, true, dropdowns: oaCdx);
             Reg(d, "gpt-4o", "GPT-4o",
-                128000, 16384, false, 0, 0, true);
-            Reg(d, "o3", "o3",
-                200000, 100000, true, 0, 0, true);
+                128000, 16384, false, 0, 0, true, dropdowns: oa);
             Reg(d, "o4-mini", "o4-mini",
-                200000, 100000, true, 0, 0, true);
+                200000, 100000, true, 0, 0, true, dropdowns: oaCdx);
+            Reg(d, "o3", "o3",
+                200000, 100000, true, 0, 0, true, dropdowns: oaCdx);
+            Reg(d, "gpt-5.2", "GPT-5.2",
+                400000, 128000, true, 0, 0, true, dropdowns: cdx);
             Reg(d, "gpt-5", "GPT-5",
                 400000, 128000, true, 0, 0, true);
             Reg(d, "gpt-5-mini", "GPT-5 Mini",
                 400000, 128000, true, 0, 0, true);
             Reg(d, "gpt-5-nano", "GPT-5 Nano",
                 400000, 128000, true, 0, 0, true);
-            Reg(d, "gpt-5.2", "GPT-5.2",
-                400000, 128000, true, 0, 0, true);
             Reg(d, "gpt-5.2-pro", "GPT-5.2 Pro",
                 400000, 128000, true, 0, 0, true);
-            Reg(d, "gpt-5.4", "GPT-5.4",
-                400000, 128000, true, 0, 0, true);
-
-            // ── Codex CLI ──
-            Reg(d, "gpt-5.3-codex", "GPT-5.3 Codex",
-                200000, 16384, true, 0, 0, false);
-            Reg(d, "gpt-5.2-codex", "GPT-5.2 Codex",
-                200000, 16384, true, 0, 0, false);
-            Reg(d, "gpt-5.1-codex-max", "GPT-5.1 Codex Max",
-                200000, 32768, true, 0, 0, false);
-            Reg(d, "gpt-5.1-codex-mini", "GPT-5.1 Codex Mini",
-                200000, 16384, true, 0, 0, false);
-            Reg(d, "codex-mini", "Codex Mini",
-                200000, 16384, true, 0, 0, false);
 
             // ── DeepSeek ──
             Reg(d, "deepseek-chat", "DeepSeek V3",
-                128000, 8192, false, 0, 0, false);
+                128000, 8192, false, 0, 0, false, dropdowns: ds);
             Reg(d, "deepseek-reasoner", "DeepSeek R1",
-                128000, 64000, true, 0, 0, false);
+                128000, 64000, true, 0, 0, false, dropdowns: ds);
 
             // ── xAI (Grok) ──
             Reg(d, "grok-4", "Grok 4",
-                256000, 16384, true, 0, 0, true);
+                256000, 16384, true, 0, 0, true, dropdowns: grok);
             Reg(d, "grok-3", "Grok 3",
-                131072, 16384, false, 0, 0, false);
-            Reg(d, "grok-3-mini", "Grok 3 Mini",
-                131072, 16384, true, 0, 0, false);
+                131072, 16384, false, 0, 0, false, dropdowns: grok);
             Reg(d, "grok-3-fast", "Grok 3 Fast",
-                131072, 16384, false, 0, 0, false);
+                131072, 16384, false, 0, 0, false, dropdowns: grok);
+            Reg(d, "grok-3-mini", "Grok 3 Mini",
+                131072, 16384, true, 0, 0, false, dropdowns: grok);
             Reg(d, "grok-3-mini-fast", "Grok 3 Mini Fast",
-                131072, 16384, true, 0, 0, false);
-            Reg(d, "grok-2", "Grok 2",
-                32768, 8192, false, 0, 0, false);
+                131072, 16384, true, 0, 0, false, dropdowns: grok);
+            Reg(d, "grok-code-fast-1", "Grok Code Fast 1",
+                256000, 16384, true, 0, 0, false, dropdowns: grok);
+            Reg(d, "grok-2-1212", "Grok 2",
+                32768, 8192, false, 0, 0, false, dropdowns: grok);
             Reg(d, "grok-2-vision", "Grok 2 Vision",
                 32768, 8192, false, 0, 0, true);
-            Reg(d, "grok-code-fast-1", "Grok Code Fast 1",
-                256000, 16384, true, 0, 0, false);
 
             // ── Groq ──
             Reg(d, "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile",
-                131072, 32768, false, 0, 0, false);
+                131072, 32768, false, 0, 0, false, dropdowns: groq);
             Reg(d, "llama-3.1-8b-instant", "Llama 3.1 8B Instant",
-                131072, 131072, false, 0, 0, false);
+                131072, 131072, false, 0, 0, false, dropdowns: groq);
             Reg(d, "gpt-oss-120b", "GPT-OSS 120B",
-                131072, 65536, true, 0, 0, false);
+                131072, 65536, true, 0, 0, false, dropdowns: groq);
             Reg(d, "gpt-oss-20b", "GPT-OSS 20B",
-                131072, 65536, true, 0, 0, false);
+                131072, 65536, true, 0, 0, false, dropdowns: groq);
 
-            // ── Ollama ──
+            // ── Ollama ── (ローカル: ドロップダウンは目安。任意のモデル名を入力可)
             Reg(d, "llama3.3", "Llama 3.3",
-                131072, 32768, false, 0, 0, false);
-            Reg(d, "qwen2.5:32b", "Qwen 2.5 32B",
-                128000, 8192, false, 0, 0, false);
-            Reg(d, "deepseek-r1:32b", "DeepSeek R1 32B",
-                128000, 8192, true, 0, 0, false);
-            Reg(d, "gemma2:27b", "Gemma 2 27B",
-                8192, 8192, false, 0, 0, false);
+                131072, 32768, false, 0, 0, false, dropdowns: olla);
+            Reg(d, "llama3.2", "Llama 3.2",
+                131072, 8192, false, 0, 0, false, dropdowns: olla);
+            Reg(d, "llama3.1", "Llama 3.1",
+                131072, 8192, false, 0, 0, false, dropdowns: olla);
+            Reg(d, "gemma3:9b", "Gemma 3 9B",
+                128000, 8192, false, 0, 0, true, dropdowns: olla);
+            Reg(d, "qwen2.5:14b", "Qwen 2.5 14B",
+                128000, 8192, false, 0, 0, false, dropdowns: olla);
             Reg(d, "phi4", "Phi-4",
-                16384, 8192, false, 0, 0, false);
+                16384, 8192, false, 0, 0, false, dropdowns: olla);
+            Reg(d, "mistral", "Mistral (Ollama)",
+                32768, 8192, false, 0, 0, false, dropdowns: olla);
+            Reg(d, "deepseek-r1:14b", "DeepSeek R1 14B",
+                128000, 8192, true, 0, 0, false, dropdowns: olla);
 
-            // ── Mistral ──
+            // ── Mistral ── (ドロップダウンは -latest 系のみ。日付固定版は性能照会用)
             Reg(d, "mistral-large-latest", "Mistral Large",
-                256000, 32768, false, 0, 0, true);
+                256000, 32768, false, 0, 0, true, dropdowns: mist);
             Reg(d, "mistral-large-2512", "Mistral Large",
                 256000, 32768, false, 0, 0, true);
             Reg(d, "mistral-medium-latest", "Mistral Medium",
-                128000, 16384, false, 0, 0, true);
+                128000, 16384, false, 0, 0, true, dropdowns: mist);
             Reg(d, "mistral-medium-2508", "Mistral Medium",
                 128000, 16384, false, 0, 0, true);
             Reg(d, "mistral-small-latest", "Mistral Small",
-                128000, 16384, false, 0, 0, false);
+                128000, 16384, false, 0, 0, false, dropdowns: mist);
             Reg(d, "mistral-small-2506", "Mistral Small",
                 128000, 16384, false, 0, 0, false);
             Reg(d, "codestral-latest", "Codestral",
-                256000, 32768, false, 0, 0, false);
+                256000, 32768, false, 0, 0, false, dropdowns: mist);
             Reg(d, "devstral-2512", "Devstral",
                 256000, 32768, false, 0, 0, false);
             Reg(d, "pixtral-large-latest", "Pixtral Large",
-                128000, 4096, false, 0, 0, true);
+                128000, 4096, false, 0, 0, true, dropdowns: mist);
             Reg(d, "open-mistral-nemo", "Mistral Nemo",
                 128000, 8192, false, 0, 0, false);
 
             // ── Perplexity ── (全モデル検索内蔵)
             Reg(d, "sonar-pro", "Sonar Pro",
-                200000, 8192, false, 0, 0, false, search: true);
+                200000, 8192, false, 0, 0, false, search: true, dropdowns: pplx);
             Reg(d, "sonar", "Sonar",
-                128000, 8192, false, 0, 0, false, search: true);
+                128000, 8192, false, 0, 0, false, search: true, dropdowns: pplx);
+            Reg(d, "sonar-reasoning-pro", "Sonar Reasoning Pro",
+                128000, 8192, true, 0, 0, false, search: true, dropdowns: pplx);
             Reg(d, "sonar-reasoning", "Sonar Reasoning",
-                128000, 8192, true, 0, 0, false, search: true);
+                128000, 8192, true, 0, 0, false, search: true, dropdowns: pplx);
+            Reg(d, "sonar-deep-research", "Sonar Deep Research",
+                128000, 8192, true, 0, 0, false, search: true, dropdowns: pplx);
 
             return d;
         }
 
-        static void Reg(Dictionary<string, ModelCapability> d,
+        static void Reg(List<ModelCapability> list,
             string modelId, string displayName,
             int input, int output,
             bool thinking, int budgetMin, int budgetMax,
-            bool imageInput, bool search = false, bool stream = true, bool deprecated = false)
+            bool imageInput, bool search = false, bool stream = true, bool deprecated = false,
+            LLMProviderType[] dropdowns = null)
         {
-            d[modelId] = new ModelCapability(modelId, displayName,
-                input, output, thinking, budgetMin, budgetMax, imageInput, search, stream, deprecated);
+            list.Add(new ModelCapability(modelId, displayName,
+                input, output, thinking, budgetMin, budgetMax, imageInput, search, stream, deprecated, dropdowns));
         }
 
         // ─── Simple JSON helpers (no external dependency) ───

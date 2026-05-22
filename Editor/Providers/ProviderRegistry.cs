@@ -70,8 +70,12 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
         public string DisplayName;
         public string ShortName;
         public ProviderSettingsKind SettingsKind;
+        // ModelPresets / ModelDisplayNames は BuildDescriptors() の末尾で
+        // ModelCapabilityRegistry から算出して埋める（単一の真実源）。
         public string[] ModelPresets;
         public string[] ModelDisplayNames;
+        /// <summary>非 null の場合、モデルドロップダウン先頭に空文字 ("") 選択肢をこのラベルで追加する。</summary>
+        public string EmptyModelOptionLabel;
         public string DefaultModel;
         public ThinkingMode ThinkingMode;
         public string ThinkingHintKey; // L10n key for thinking UI hint
@@ -181,123 +185,11 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
         };
 
         // ─── Model preset arrays ───
-
-        static readonly string[] GeminiModelPresets =
-        {
-            "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro",
-            "gemini-3-flash-preview", "gemini-3.1-pro-preview",
-        };
-
-        static readonly string[] ClaudeCliModelPresets = { "", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001" };
-        static readonly string[] ClaudeCliModelDisplayNames =
-        {
-            "(CLIデフォルト)",
-            "Opus 4.6  (claude-opus-4-6)",
-            "Sonnet 4.6  (claude-sonnet-4-6)",
-            "Haiku 4.5  (claude-haiku-4-5-20251001)",
-        };
-
-        static readonly string[] GeminiCliModelPresets = { "", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3-flash-preview" };
-        static readonly string[] GeminiCliModelDisplayNames =
-        {
-            "(CLIデフォルト)",
-            "Gemini 2.5 Flash  (gemini-2.5-flash)",
-            "Gemini 2.5 Pro  (gemini-2.5-pro)",
-            "Gemini 3 Flash  (gemini-3-flash-preview)",
-        };
-
-        static readonly string[] ClaudeApiModelPresets = { "", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001" };
-        static readonly string[] ClaudeApiModelDisplayNames =
-        {
-            "(デフォルト: claude-sonnet-4-6)",
-            "Opus 4.6  (claude-opus-4-6)",
-            "Sonnet 4.6  (claude-sonnet-4-6)",
-            "Haiku 4.5  (claude-haiku-4-5-20251001)",
-        };
-
-        static readonly string[] OpenAIModelPresets = { "gpt-5.4", "gpt-4.1", "gpt-4.1-mini", "gpt-4o", "o4-mini", "o3" };
-        static readonly string[] OpenAIModelDisplayNames =
-        {
-            "GPT-5.4  (gpt-5.4)", "GPT-4.1  (gpt-4.1)", "GPT-4.1 mini  (gpt-4.1-mini)",
-            "GPT-4o  (gpt-4o)", "o4-mini  (o4-mini)", "o3  (o3)",
-        };
-
-        static readonly string[] DeepSeekModelPresets = { "deepseek-chat", "deepseek-reasoner" };
-        static readonly string[] DeepSeekModelDisplayNames = { "DeepSeek V3  (deepseek-chat)", "DeepSeek R1  (deepseek-reasoner)" };
-
-        static readonly string[] GroqModelPresets =
-        {
-            "llama-3.3-70b-versatile", "deepseek-r1-distill-llama-70b",
-            "qwen-qwq-32b", "llama-3.1-8b-instant", "mixtral-8x7b-32768",
-        };
-        static readonly string[] GroqModelDisplayNames =
-        {
-            "Llama 3.3 70B  (llama-3.3-70b-versatile)",
-            "DeepSeek R1 Distill 70B  (deepseek-r1-distill-llama-70b)",
-            "QwQ 32B  (qwen-qwq-32b)",
-            "Llama 3.1 8B Instant  (llama-3.1-8b-instant)",
-            "Mixtral 8x7B  (mixtral-8x7b-32768)",
-        };
-
-        static readonly string[] OllamaModelPresets =
-        {
-            "llama3.3", "llama3.2", "llama3.1", "gemma3:9b",
-            "qwen2.5:14b", "phi4", "mistral", "deepseek-r1:14b",
-        };
-        static readonly string[] OllamaModelDisplayNames =
-        {
-            "Llama 3.3  (llama3.3)", "Llama 3.2  (llama3.2)", "Llama 3.1  (llama3.1)",
-            "Gemma 3 9B  (gemma3:9b)", "Qwen 2.5 14B  (qwen2.5:14b)",
-            "Phi-4  (phi4)", "Mistral  (mistral)", "DeepSeek R1 14B  (deepseek-r1:14b)",
-        };
-
-        static readonly string[] XaiModelPresets = { "grok-3", "grok-3-fast", "grok-3-mini", "grok-3-mini-fast", "grok-2-1212" };
-        static readonly string[] XaiModelDisplayNames =
-        {
-            "Grok 3  (grok-3)", "Grok 3 Fast  (grok-3-fast)",
-            "Grok 3 Mini  (grok-3-mini)", "Grok 3 Mini Fast  (grok-3-mini-fast)",
-            "Grok 2  (grok-2-1212)",
-        };
-
-        static readonly string[] MistralModelPresets =
-        {
-            "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest",
-            "codestral-latest", "pixtral-large-latest",
-        };
-        static readonly string[] MistralModelDisplayNames =
-        {
-            "Mistral Large  (mistral-large-latest)", "Mistral Medium  (mistral-medium-latest)",
-            "Mistral Small  (mistral-small-latest)", "Codestral  (codestral-latest)",
-            "Pixtral Large  (pixtral-large-latest)",
-        };
-
-        static readonly string[] PerplexityModelPresets =
-        {
-            "sonar-pro", "sonar", "sonar-reasoning-pro", "sonar-reasoning", "sonar-deep-research",
-        };
-        static readonly string[] PerplexityModelDisplayNames =
-        {
-            "Sonar Pro  (sonar-pro)", "Sonar  (sonar)",
-            "Sonar Reasoning Pro  (sonar-reasoning-pro)",
-            "Sonar Reasoning  (sonar-reasoning)",
-            "Sonar Deep Research  (sonar-deep-research)",
-        };
-
-        static readonly string[] CodexCliModelPresets = { "", "gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex-max", "gpt-5.2", "gpt-5.1-codex-mini", "codex-mini", "o4-mini", "o3", "gpt-4.1", "gpt-4.1-mini" };
-        static readonly string[] CodexCliModelDisplayNames =
-        {
-            "(CLIデフォルト)",
-            "GPT-5.3 Codex  (gpt-5.3-codex)",
-            "GPT-5.2 Codex  (gpt-5.2-codex)",
-            "GPT-5.1 Codex Max  (gpt-5.1-codex-max)",
-            "GPT-5.2  (gpt-5.2)",
-            "GPT-5.1 Codex Mini  (gpt-5.1-codex-mini)",
-            "Codex Mini  (codex-mini)",
-            "o4-mini  (o4-mini)",
-            "o3  (o3)",
-            "GPT-4.1  (gpt-4.1)",
-            "GPT-4.1 mini  (gpt-4.1-mini)",
-        };
+        //
+        // モデルのプリセット / 表示名は ModelCapabilityRegistry を単一の真実源とし、
+        // BuildDescriptors() の末尾で各 descriptor.ModelPresets / .ModelDisplayNames に
+        // 算出して埋める。ここに静的配列を持たせると二重管理になりズレるため置かない。
+        // モデルの追加・変更は ModelCapabilities.cs の BuildStaticModels() で行うこと。
 
         // ─── Descriptor table ───
 
@@ -322,7 +214,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Gemini (Google AI)", ShortName = "Gemini",
                     SettingsKind = ProviderSettingsKind.Gemini,
-                    ModelPresets = GeminiModelPresets, ModelDisplayNames = GeminiModelPresets,
                     DefaultModel = "gemini-2.5-flash",
                     ThinkingMode = ThinkingMode.Budget,
                     ThinkingHintKey = "Gemini 2.5 系モデルで対応",
@@ -352,7 +243,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Claude CLI", ShortName = "Claude CLI",
                     SettingsKind = ProviderSettingsKind.CliProvider,
-                    ModelPresets = ClaudeCliModelPresets, ModelDisplayNames = ClaudeCliModelDisplayNames,
+                    EmptyModelOptionLabel = "(CLIデフォルト)",
                     DefaultModel = "",
                     ThinkingMode = ThinkingMode.Effort,
                     ThinkingHintKey = "Effort レベルとして適用",
@@ -366,7 +257,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Gemini CLI", ShortName = "Gemini CLI",
                     SettingsKind = ProviderSettingsKind.CliProvider,
-                    ModelPresets = GeminiCliModelPresets, ModelDisplayNames = GeminiCliModelDisplayNames,
+                    EmptyModelOptionLabel = "(CLIデフォルト)",
                     DefaultModel = "",
                     ThinkingMode = ThinkingMode.Budget,
                     ThinkingHintKey = "Gemini 2.5+ で適用 (settings.json 経由)",
@@ -390,7 +281,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Claude API", ShortName = "Claude API",
                     SettingsKind = ProviderSettingsKind.ClaudeApi,
-                    ModelPresets = ClaudeApiModelPresets, ModelDisplayNames = ClaudeApiModelDisplayNames,
+                    EmptyModelOptionLabel = "(デフォルト: claude-sonnet-4-6)",
                     DefaultModel = "",
                     ThinkingMode = ThinkingMode.Budget,
                     ThinkingHintKey = "Claude 3.5 Sonnet 以降で対応",
@@ -404,7 +295,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "OpenAI", ShortName = "OpenAI",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleApiKey,
-                    ModelPresets = OpenAIModelPresets, ModelDisplayNames = OpenAIModelDisplayNames,
                     DefaultModel = "gpt-4.1",
                     ThinkingMode = ThinkingMode.Effort,
                     ThinkingHintKey = "o 系モデル (o3, o4-mini 等) で適用",
@@ -419,7 +309,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "DeepSeek", ShortName = "DeepSeek",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleApiKey,
-                    ModelPresets = DeepSeekModelPresets, ModelDisplayNames = DeepSeekModelDisplayNames,
                     DefaultModel = "deepseek-chat",
                     ThinkingMode = ThinkingMode.Effort,
                     ThinkingHintKey = "deepseek-reasoner で適用",
@@ -434,7 +323,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Groq", ShortName = "Groq",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleApiKey,
-                    ModelPresets = GroqModelPresets, ModelDisplayNames = GroqModelDisplayNames,
                     DefaultModel = "llama-3.3-70b-versatile",
                     ThinkingMode = ThinkingMode.None,
                     DefaultBaseUrl = "https://api.groq.com/openai/v1",
@@ -448,7 +336,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Ollama", ShortName = "Ollama",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleUrl,
-                    ModelPresets = OllamaModelPresets, ModelDisplayNames = OllamaModelDisplayNames,
                     DefaultModel = "llama3.3",
                     ThinkingMode = ThinkingMode.None,
                     DefaultBaseUrl = "http://localhost:11434/v1",
@@ -463,7 +350,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "xAI (Grok)", ShortName = "Grok",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleApiKey,
-                    ModelPresets = XaiModelPresets, ModelDisplayNames = XaiModelDisplayNames,
                     DefaultModel = "grok-3",
                     ThinkingMode = ThinkingMode.Effort,
                     ThinkingHintKey = "Grok 3 Mini / Grok 4 で適用",
@@ -478,7 +364,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Mistral", ShortName = "Mistral",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleApiKey,
-                    ModelPresets = MistralModelPresets, ModelDisplayNames = MistralModelDisplayNames,
                     DefaultModel = "mistral-large-latest",
                     ThinkingMode = ThinkingMode.None,
                     DefaultBaseUrl = "https://api.mistral.ai/v1",
@@ -492,7 +377,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Perplexity", ShortName = "Perplexity",
                     SettingsKind = ProviderSettingsKind.OpenAICompatibleApiKey,
-                    ModelPresets = PerplexityModelPresets, ModelDisplayNames = PerplexityModelDisplayNames,
                     DefaultModel = "sonar-pro",
                     ThinkingMode = ThinkingMode.None,
                     DefaultBaseUrl = "https://api.perplexity.ai",
@@ -516,7 +400,6 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Vertex AI", ShortName = "Vertex AI",
                     SettingsKind = ProviderSettingsKind.VertexAI,
-                    ModelPresets = GeminiModelPresets, ModelDisplayNames = GeminiModelPresets,
                     DefaultModel = "gemini-2.5-flash",
                     ThinkingMode = ThinkingMode.Budget,
                     ThinkingHintKey = "Gemini 2.5 系モデルで対応",
@@ -530,7 +413,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                 {
                     DisplayName = "Codex CLI", ShortName = "Codex CLI",
                     SettingsKind = ProviderSettingsKind.CliProvider,
-                    ModelPresets = CodexCliModelPresets, ModelDisplayNames = CodexCliModelDisplayNames,
+                    EmptyModelOptionLabel = "(CLIデフォルト)",
                     DefaultModel = "",
                     ThinkingMode = ThinkingMode.Effort,
                     ThinkingHintKey = "Responses API 対応モデルで適用",
@@ -552,6 +435,43 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                     DescriptionKey = "外部エージェント (Claude Code, Cursor 等) が MCP 経由で UnityAgent を操作します。UnityAgent 側のチャット入力は無効化されますが、メッシュ選択などの UI インタラクションは外部エージェントからの要求に応じて引き続き動作します。",
                 },
             };
+
+            // モデルプリセット / 表示名は ModelCapabilityRegistry を単一の真実源として算出する。
+            // *ModelPresets[] / *ModelDisplayNames[] の二重管理を排除するための要。
+            foreach (var kv in _descriptors)
+            {
+                var desc = kv.Value;
+                var (ids, labels) = ModelCapabilityRegistry.GetDropdownModels(kv.Key);
+                if (ids.Length == 0) continue; // モデル選択を持たないプロバイダーは null のまま
+
+                if (desc.EmptyModelOptionLabel != null)
+                {
+                    ids = PrependItem("", ids);
+                    labels = PrependItem(desc.EmptyModelOptionLabel, labels);
+                }
+                desc.ModelPresets = ids;
+                desc.ModelDisplayNames = labels;
+            }
+
+            // 既定モデルの健全性チェック（単一真実源化後に残る唯一のドリフト面）。
+            foreach (var kv in _descriptors)
+            {
+                var desc = kv.Value;
+                if (string.IsNullOrEmpty(desc.DefaultModel)) continue;
+                var cap = ModelCapabilityRegistry.GetRegistered(desc.DefaultModel);
+                if (cap == null)
+                    Debug.LogWarning($"[UnityAgent] プロバイダー '{desc.DisplayName}' の既定モデル '{desc.DefaultModel}' が ModelCapabilityRegistry に未登録です。");
+                else if (cap.IsDeprecated)
+                    Debug.LogWarning($"[UnityAgent] プロバイダー '{desc.DisplayName}' の既定モデル '{desc.DefaultModel}' は deprecated です。");
+            }
+        }
+
+        static string[] PrependItem(string item, string[] arr)
+        {
+            var result = new string[arr.Length + 1];
+            result[0] = item;
+            Array.Copy(arr, 0, result, 1, arr.Length);
+            return result;
         }
 
         // ─── Config load/save ───
