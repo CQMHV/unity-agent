@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using UnityEngine;
 
@@ -69,49 +70,58 @@ namespace AjisaiFlow.UnityAgent.Editor
             File.WriteAllText(Path.Combine(HistoryDir, fileName), json);
         }
 
-        public static List<ChatSessionHeader> ListSessions()
+        /// <summary>セッションファイルのパス一覧を新しい順で返す（ファイル内容は読まない、高速）。</summary>
+        public static List<string> ListSessionFiles()
         {
-            var headers = new List<ChatSessionHeader>();
-
-            if (!Directory.Exists(HistoryDir)) return headers;
-
+            var result = new List<string>();
+            if (!Directory.Exists(HistoryDir)) return result;
             var files = Directory.GetFiles(HistoryDir, "*.json");
             Array.Sort(files);
             Array.Reverse(files);
+            result.AddRange(files);
+            return result;
+        }
 
-            foreach (var file in files)
+        /// <summary>1 セッションファイルのヘッダーを解析する。失敗時は null。</summary>
+        public static ChatSessionHeader ReadSessionHeader(string filePath)
+        {
+            try
             {
-                try
+                string json = File.ReadAllText(filePath);
+                var session = JsonUtility.FromJson<ChatSession>(json);
+                if (session == null) return null;
+                int msgCount = 0;
+                if (session.records != null)
                 {
-                    string json = File.ReadAllText(file);
-                    var session = JsonUtility.FromJson<ChatSession>(json);
-
-                    int msgCount = 0;
-                    if (session.records != null)
+                    foreach (var r in session.records)
                     {
-                        foreach (var r in session.records)
-                        {
-                            if (r.type == (int)ChatEntry.EntryType.User ||
-                                r.type == (int)ChatEntry.EntryType.Agent)
-                                msgCount++;
-                        }
+                        if (r.type == (int)ChatEntry.EntryType.User ||
+                            r.type == (int)ChatEntry.EntryType.Agent)
+                            msgCount++;
                     }
-
-                    headers.Add(new ChatSessionHeader
-                    {
-                        title = session.title,
-                        timestamp = session.timestamp,
-                        filePath = file,
-                        messageCount = msgCount
-                    });
                 }
-                catch
+                return new ChatSessionHeader
                 {
-                    // Skip corrupt files
-                }
+                    title = session.title,
+                    timestamp = session.timestamp,
+                    filePath = filePath,
+                    messageCount = msgCount
+                };
             }
+            catch
+            {
+                return null;
+            }
+        }
 
-            return headers;
+        /// <summary>ファイル名 "yyyyMMdd_HHmmss.json" から日時文字列を導出する。失敗時はファイル名。</summary>
+        public static string TimestampFromFileName(string filePath)
+        {
+            string name = Path.GetFileNameWithoutExtension(filePath);
+            if (DateTime.TryParseExact(name, "yyyyMMdd_HHmmss",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+                return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            return name;
         }
 
         public static List<ChatEntry> Load(string filePath)

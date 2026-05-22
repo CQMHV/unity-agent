@@ -45,7 +45,6 @@ namespace AjisaiFlow.UnityAgent.Editor
         private bool _shouldScrollToBottom;
         private UnityAgentCore _agent;
         private bool _showHistory;
-        private List<ChatSessionHeader> _historyList;
         private string _currentToolStatus = "";
         private ChatEntry _streamingEntry = null;
         // In-flight tool call tracking for rich ToolCall cards (Phase 1)
@@ -380,8 +379,7 @@ namespace AjisaiFlow.UnityAgent.Editor
                 _showHistory = !_showHistory;
                 if (_showHistory)
                 {
-                    _historyList = ChatHistoryManager.ListSessions();
-                    _historyPanel.LoadSessions(_historyList);
+                    _historyPanel.BeginLoad();
                     _historyPanel.Show();
                 }
                 else
@@ -476,8 +474,7 @@ namespace AjisaiFlow.UnityAgent.Editor
             _historyPanel.OnSessionDeleted = filePath =>
             {
                 ChatHistoryManager.Delete(filePath);
-                _historyList = ChatHistoryManager.ListSessions();
-                _historyPanel.LoadSessions(_historyList);
+                _historyPanel.RemoveSession(filePath);
             };
         }
 
@@ -1269,11 +1266,11 @@ namespace AjisaiFlow.UnityAgent.Editor
         {
             try
             {
-                var sessions = ChatHistoryManager.ListSessions();
-                int limit = Mathf.Min(sessions.Count, 10);
+                var files = ChatHistoryManager.ListSessionFiles();
+                int limit = Mathf.Min(files.Count, 10);
                 for (int i = 0; i < limit; i++)
                 {
-                    var entries = ChatHistoryManager.Load(sessions[i].filePath);
+                    var entries = ChatHistoryManager.Load(files[i]);
                     if (entries == null) continue;
                     foreach (var entry in entries)
                     {
