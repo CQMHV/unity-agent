@@ -41,6 +41,7 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             _theme = theme;
             style.flexGrow = 1;
             style.display = DisplayStyle.None;
+            style.backgroundColor = theme.Surface;
 
             _searchField = new TextField();
             _searchField.style.marginLeft = 12;

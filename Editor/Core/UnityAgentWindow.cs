@@ -370,12 +370,18 @@ namespace AjisaiFlow.UnityAgent.Editor
                 _showHistory = !_showHistory;
                 if (_showHistory)
                 {
+                    _welcomePanel.style.display = DisplayStyle.None;
+                    _chatPanel.style.display = DisplayStyle.None;
                     _historyPanel.BeginLoad();
                     _historyPanel.Show();
                 }
                 else
                 {
                     _historyPanel.Hide();
+                    _welcomePanel.style.display =
+                        _chatHistory.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                    _chatPanel.style.display =
+                        _chatHistory.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
                 }
                 _toolbarPanel.SetHistoryActive(_showHistory);
             };
