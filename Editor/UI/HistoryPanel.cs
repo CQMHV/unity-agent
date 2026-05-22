@@ -82,11 +82,19 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             {
                 string file = _pendingFiles.Dequeue();
                 var header = ChatHistoryManager.ReadSessionHeader(file);
-                if (header != null)
+                if (header == null)
                 {
-                    _headerCache[file] = header;
-                    ReplaceRow(file, header);
+                    // 破損・読み取り不能ファイル: 失敗状態の行に差し替える（プレースホルダのまま固定しない）。
+                    header = new ChatSessionHeader
+                    {
+                        title = M("(読み込み失敗)"),
+                        timestamp = ChatHistoryManager.TimestampFromFileName(file),
+                        filePath = file,
+                        messageCount = 0
+                    };
                 }
+                _headerCache[file] = header;
+                ReplaceRow(file, header);
             }
             if (_pendingFiles.Count == 0)
             {
@@ -140,9 +148,13 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             deleteBtn.RegisterCallback<ClickEvent>(evt =>
             {
                 evt.StopPropagation();
+                string dlgTitle =
+                    _headerCache.TryGetValue(filePath, out var ch) && !string.IsNullOrEmpty(ch.title)
+                        ? ch.title
+                        : ChatHistoryManager.TimestampFromFileName(filePath);
                 bool ok = UnityEditor.EditorUtility.DisplayDialog(
                     M("履歴を削除"),
-                    string.Format(M("「{0}」を削除しますか？\nこの操作は元に戻せません。"), title),
+                    string.Format(M("「{0}」を削除しますか？\nこの操作は元に戻せません。"), dlgTitle),
                     M("削除"), M("キャンセル"));
                 if (ok) OnSessionDeleted?.Invoke(filePath);
             });
@@ -188,7 +200,12 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
         }
 
         public void Show() => style.display = DisplayStyle.Flex;
-        public void Hide() => style.display = DisplayStyle.None;
+        public void Hide()
+        {
+            _loadPump?.Pause();
+            _loadPump = null;
+            style.display = DisplayStyle.None;
+        }
         public bool IsVisible => resolvedStyle.display == DisplayStyle.Flex;
     }
 }

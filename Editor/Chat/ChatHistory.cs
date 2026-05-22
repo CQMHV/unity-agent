@@ -130,6 +130,7 @@ namespace AjisaiFlow.UnityAgent.Editor
 
             string json = File.ReadAllText(filePath);
             var session = JsonUtility.FromJson<ChatSession>(json);
+            if (session == null || session.records == null) return null;
             var entries = new List<ChatEntry>();
 
             foreach (var record in session.records)
