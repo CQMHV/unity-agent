@@ -247,7 +247,7 @@ namespace AjisaiFlow.UnityAgent.Editor
             if (compSheet != null && !rootVisualElement.styleSheets.Contains(compSheet))
                 rootVisualElement.styleSheets.Add(compSheet);
 
-            // FontAsset は MD3FontAssetStore によりディスクアセットとして永続化されており
+            // FontAsset は MD3FontAssetStore によりディスクアセットとして永続化されており、
             // ドメインリロードを生き延びるため、テーマ (フォント定義含む) を適用するだけでよい。
             _theme.ApplyTo(rootVisualElement);
 
