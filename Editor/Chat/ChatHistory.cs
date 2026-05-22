@@ -85,11 +85,24 @@ namespace AjisaiFlow.UnityAgent.Editor
                 {
                     string json = File.ReadAllText(file);
                     var session = JsonUtility.FromJson<ChatSession>(json);
+
+                    int msgCount = 0;
+                    if (session.records != null)
+                    {
+                        foreach (var r in session.records)
+                        {
+                            if (r.type == (int)ChatEntry.EntryType.User ||
+                                r.type == (int)ChatEntry.EntryType.Agent)
+                                msgCount++;
+                        }
+                    }
+
                     headers.Add(new ChatSessionHeader
                     {
                         title = session.title,
                         timestamp = session.timestamp,
-                        filePath = file
+                        filePath = file,
+                        messageCount = msgCount
                     });
                 }
                 catch
@@ -135,5 +148,6 @@ namespace AjisaiFlow.UnityAgent.Editor
         public string title;
         public string timestamp;
         public string filePath;
+        public int messageCount;
     }
 }
