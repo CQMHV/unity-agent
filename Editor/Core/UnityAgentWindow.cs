@@ -50,7 +50,7 @@ namespace AjisaiFlow.UnityAgent.Editor
         // In-flight tool call tracking for rich ToolCall cards (Phase 1)
         private int _toolCallSeq;
         private string _activeToolCallId;
-        private int _lastAgentEntryIndex = -1;
+
         private AgentWebServer _webServer;
         private double _lastWebCacheTime;
         private ChatEntry _currentDebugTarget;
@@ -356,7 +356,6 @@ namespace AjisaiFlow.UnityAgent.Editor
                     ChatHistoryManager.Save(_chatHistory);
                 ResetPendingInteractionState();
                 _chatHistory.Clear();
-                _lastAgentEntryIndex = -1;
                 _fullLog.Clear();
                 if (_agent != null) _agent.ClearHistory();
                 DiscordWebhookLogger.ResetSession();
@@ -1144,19 +1143,6 @@ namespace AjisaiFlow.UnityAgent.Editor
         //  Business logic (edit/resend, regenerate, send, etc.)
         // ═══════════════════════════════════════════════════════
 
-        private void UpdateLastAgentEntryIndex()
-        {
-            _lastAgentEntryIndex = -1;
-            for (int i = _chatHistory.Count - 1; i >= 0; i--)
-            {
-                if (_chatHistory[i].type == ChatEntry.EntryType.Agent)
-                {
-                    _lastAgentEntryIndex = i;
-                    break;
-                }
-            }
-        }
-
         /// <summary>
         /// 指定したチャットインデックスのユーザーメッセージを編集対象にする。
         /// 切り詰め対象ターンに Unity 変更があれば確認ダイアログを出す。
@@ -1188,7 +1174,6 @@ namespace AjisaiFlow.UnityAgent.Editor
             }
 
             _chatHistory.RemoveRange(chatIndex, _chatHistory.Count - chatIndex);
-            UpdateLastAgentEntryIndex();
             _agent?.TruncateHistory(userMessageCount);
             _userQuery = originalText;
             _inputBar?.SetText(originalText);
@@ -1626,7 +1611,6 @@ namespace AjisaiFlow.UnityAgent.Editor
                             ExtractThinking(entry, response);
                             _chatHistory.Add(entry);
                             _chatPanel?.AppendEntry(entry);
-                            _lastAgentEntryIndex = _chatHistory.Count - 1;
                             _fullLog.AppendLine($"[AGENT] {response}");
                             _currentDebugTarget = entry;
                             if (_earlyDebugLogs != null)
@@ -1913,7 +1897,6 @@ namespace AjisaiFlow.UnityAgent.Editor
                         _chatPanel?.ClearActivity();
                         _streamingEntry = ChatEntry.CreateAgent(partialText);
                         _chatHistory.Add(_streamingEntry);
-                        _lastAgentEntryIndex = _chatHistory.Count - 1;
                         _currentDebugTarget = _streamingEntry;
                         if (_earlyDebugLogs != null)
                         {
@@ -1943,7 +1926,6 @@ namespace AjisaiFlow.UnityAgent.Editor
                         _chatPanel?.ClearActivity();
                         _streamingEntry = ChatEntry.CreateAgent("");
                         _chatHistory.Add(_streamingEntry);
-                        _lastAgentEntryIndex = _chatHistory.Count - 1;
                         _currentDebugTarget = _streamingEntry;
                         _chatPanel?.SetStreamingEntry(_streamingEntry);
                     }
