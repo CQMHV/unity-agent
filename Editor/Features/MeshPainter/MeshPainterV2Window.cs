@@ -6,6 +6,7 @@ using UnityEditor;
 using AjisaiFlow.MD3SDK.Editor;
 using AjisaiFlow.UnityAgent.Editor.Tools;
 using AjisaiFlow.UnityAgent.Editor.MeshPaint;
+using AjisaiFlow.UnityAgent.Editor.MA;
 using static AjisaiFlow.UnityAgent.Editor.L10n;
 
 namespace AjisaiFlow.UnityAgent.Editor
@@ -71,6 +72,7 @@ namespace AjisaiFlow.UnityAgent.Editor
         private readonly List<MD3Tab> _tabButtons = new List<MD3Tab>();
         private Label _previewStatusLabel;
         private IMGUIContainer _uvImguiContainer;
+        private MD3Button _applyAllBtn;
 
         private static readonly string[] TabLabelsRaw = { "ペイント", "グラデーション", "HSV", "明るさ/コントラスト", "Sceneペイント" };
         private static readonly string[] DirectionValues = { "top_to_bottom", "bottom_to_top", "left_to_right", "right_to_left" };
@@ -287,41 +289,92 @@ namespace AjisaiFlow.UnityAgent.Editor
             };
             split.RegisterCallback(onceSplit);
 
-            // --- Top pane (A + C) ---
-            var topRow = new VisualElement();
-            topRow.style.flexDirection = FlexDirection.Row;
+            // --- Top pane (A + C) — horizontal TwoPaneSplitView so the user can
+            // drag the divider between the left column and the right column. ---
+            var topRow = new TwoPaneSplitView(
+                fixedPaneIndex: 0,
+                fixedPaneStartDimension: 260,
+                orientation: TwoPaneSplitViewOrientation.Horizontal);
             topRow.style.flexGrow = 1;
+            topRow.style.minWidth = 0;
             split.Add(topRow);
 
-            // [A] mesh list + edit list (stacked vertically in the left column)
+            // [A] mesh list + edit list (TwoPaneSplitView so the user can drag
+            // the divider between them) + always-visible "Apply All" footer.
             var leftCol = new VisualElement();
-            leftCol.style.width = 260;
-            leftCol.style.marginRight = 8;
+            leftCol.style.minWidth = 0;
             leftCol.style.flexDirection = FlexDirection.Column;
+
+            var leftSplit = new TwoPaneSplitView(
+                fixedPaneIndex: 0,
+                fixedPaneStartDimension: 150,
+                orientation: TwoPaneSplitViewOrientation.Vertical);
+            leftSplit.style.flexGrow = 1;
+            leftSplit.style.minHeight = 0;
+            leftCol.Add(leftSplit);
+
+            // Initial 50/50 split once the pane has a real height.
+            EventCallback<GeometryChangedEvent> onceLeftSplit = null;
+            onceLeftSplit = evt =>
+            {
+                float h = leftSplit.resolvedStyle.height;
+                if (h > 0)
+                {
+                    var initMethod = typeof(TwoPaneSplitView).GetMethod(
+                        "Init",
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.NonPublic);
+                    if (initMethod != null)
+                    {
+                        initMethod.Invoke(leftSplit, new object[] { 0, h * 0.5f, TwoPaneSplitViewOrientation.Vertical });
+                    }
+                    leftSplit.UnregisterCallback(onceLeftSplit);
+                }
+            };
+            leftSplit.RegisterCallback(onceLeftSplit);
 
             var rendererCard = new MD3Card(M("メッシュ一覧"), null, MD3CardStyle.Outlined);
             rendererCard.style.flexGrow = 1;
-            rendererCard.style.minHeight = 120;
+            rendererCard.style.minHeight = 0;
             _rendererListContainer = new ScrollView(ScrollViewMode.Vertical);
             _rendererListContainer.style.flexGrow = 1;
+            _rendererListContainer.style.minHeight = 0;
             rendererCard.Add(_rendererListContainer);
-            leftCol.Add(rendererCard);
+            leftSplit.Add(rendererCard);
 
             var editListCard = new MD3Card(M("編集リスト"), null, MD3CardStyle.Outlined);
-            editListCard.style.marginTop = 6;
             editListCard.style.flexGrow = 1;
-            editListCard.style.minHeight = 140;
+            editListCard.style.minHeight = 0;
             _editListContainer = new VisualElement();
             _editListContainer.style.flexDirection = FlexDirection.Column;
+            _editListContainer.style.flexGrow = 1;
+            _editListContainer.style.minHeight = 0;
             editListCard.Add(_editListContainer);
-            leftCol.Add(editListCard);
+            leftSplit.Add(editListCard);
+
+            // Sticky footer: always-visible "Apply All" button below the split.
+            _applyAllBtn = new MD3Button(M("すべて適用"), MD3ButtonStyle.Filled);
+            _applyAllBtn.style.marginTop = 8;
+            _applyAllBtn.style.flexShrink = 0;
+            _applyAllBtn.tooltip = M("編集リストとアクティブなタブの編集内容をディスク/MA にコミットします");
+            _applyAllBtn.SetEnabled(false);
+            _applyAllBtn.clicked += () =>
+            {
+                ApplyAllStaged();
+                ResetAdjustmentParameters();
+                RebuildTabContent();
+            };
+            leftCol.Add(_applyAllBtn);
 
             topRow.Add(leftCol);
 
             // [C] right column (tabs + content)
             var rightCol = new VisualElement();
             rightCol.style.flexGrow = 1;
+            rightCol.style.minWidth = 0;
             rightCol.style.flexDirection = FlexDirection.Column;
+            rightCol.style.marginLeft = 8;
 
             var tabRow = new VisualElement();
             tabRow.style.flexDirection = FlexDirection.Row;
@@ -341,6 +394,7 @@ namespace AjisaiFlow.UnityAgent.Editor
 
             _tabContentHost = new ScrollView(ScrollViewMode.Vertical);
             _tabContentHost.style.flexGrow = 1;
+            _tabContentHost.style.minHeight = 0;
             rightCol.Add(_tabContentHost);
 
             topRow.Add(rightCol);
@@ -402,7 +456,7 @@ namespace AjisaiFlow.UnityAgent.Editor
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
-            scroll.style.maxHeight = 260;
+            scroll.style.minHeight = 0;
             _editListContainer.Add(scroll);
 
             bool any = false;
@@ -465,18 +519,14 @@ namespace AjisaiFlow.UnityAgent.Editor
                 scroll.Add(empty);
             }
 
-            // Apply-all footer
-            var applyAllBtn = new MD3Button(M("すべて適用"), MD3ButtonStyle.Filled);
-            applyAllBtn.style.marginTop = 6;
-            applyAllBtn.tooltip = M("編集リストとアクティブなタブの編集内容をディスク/MA にコミットします");
-            applyAllBtn.SetEnabled(any);
-            applyAllBtn.clicked += () =>
-            {
-                ApplyAllStaged();
-                ResetAdjustmentParameters();
-                RebuildTabContent();
-            };
-            _editListContainer.Add(applyAllBtn);
+            // The "Apply All" button now lives as a sticky footer in BuildLayout;
+            // here we only sync its enabled state. Enable when any entry is
+            // dirty for commit (covers both "ops added" and "ops removed since
+            // last commit" — the latter is needed to push the empty state to disk).
+            bool anyDirty = false;
+            foreach (var e in _sessionManager.AllEntries)
+                if (e.IsDirtyForCommit) { anyDirty = true; break; }
+            _applyAllBtn?.SetEnabled(anyDirty);
         }
 
         private void RebuildRendererListUI()
@@ -1029,24 +1079,43 @@ namespace AjisaiFlow.UnityAgent.Editor
         /// </summary>
         private void ApplyAllStaged()
         {
-            var entriesWithOps = new List<MeshPaintSessionEntry>();
+            // Use the per-entry dirty flag rather than Ops.Count so that
+            // "removed all ops since last commit" still triggers a PNG rewrite —
+            // otherwise the on-disk asset would stay frozen at the previous commit.
+            var dirtyEntries = new List<MeshPaintSessionEntry>();
             foreach (var e in _sessionManager.AllEntries)
-                if (e.Ops.Count > 0) entriesWithOps.Add(e);
+                if (e.IsDirtyForCommit) dirtyEntries.Add(e);
 
-            if (entriesWithOps.Count == 0) return;
+            if (dirtyEntries.Count == 0) return;
+
+            // Group dirty entries by their source-texture GUID. Multiple renderers
+            // sharing the same base texture (e.g., several hair meshes pointing at
+            // hair_tex.png) get folded into a single shared commit: one PNG, one
+            // material asset, all renderers re-pointed to it. Entries with empty
+            // GUIDs each get their own bucket (treated as solo).
+            var groups = new Dictionary<string, List<MeshPaintSessionEntry>>();
+            for (int i = 0; i < dirtyEntries.Count; i++)
+            {
+                var e = dirtyEntries[i];
+                string guid = e.Session?.OriginalTexGuid;
+                if (string.IsNullOrEmpty(guid))
+                    guid = "__solo_" + i; // unique key per entry — never shared
+                if (!groups.TryGetValue(guid, out var list))
+                {
+                    list = new List<MeshPaintSessionEntry>();
+                    groups[guid] = list;
+                }
+                list.Add(e);
+            }
 
             bool anyFailed = false;
             int committed = 0;
-            foreach (var entry in entriesWithOps)
+            foreach (var group in groups.Values)
             {
-                bool ok;
-                if (_useMANonDestructive)
-                    ok = MeshPaintMACommitter.Apply(entry, _avatarRoot);
-                else
-                    ok = CommitEntryDestructive(entry);
-
+                bool ok = (group.Count == 1)
+                    ? CommitGroupSolo(group[0])
+                    : CommitGroupShared(group);
                 if (!ok) { anyFailed = true; continue; }
-                entry.Ops.Clear();
                 committed++;
             }
 
@@ -1060,10 +1129,175 @@ namespace AjisaiFlow.UnityAgent.Editor
         }
 
         /// <summary>
+        /// Commit a single-member group. Ops are preserved so the user can
+        /// continue editing them after the commit (see <see cref="MeshPaintPreviewSession.Commit"/>).
+        /// </summary>
+        private bool CommitGroupSolo(MeshPaintSessionEntry entry)
+        {
+            bool ok = _useMANonDestructive
+                ? MeshPaintMACommitter.Apply(entry, _avatarRoot)
+                : CommitEntryDestructive(entry);
+            if (ok) entry.MarkCleanForCommit();
+            return ok;
+        }
+
+        /// <summary>
+        /// Commit a multi-member group (renderers sharing the same source texture).
+        /// All members' ops are sequentially applied to one combined buffer, written
+        /// as one PNG, wrapped in one material asset that every member's renderer is
+        /// then re-pointed to. Member sessions are disposed afterwards — the user
+        /// re-edits against the shared material if they want further changes.
+        /// </summary>
+        private bool CommitGroupShared(List<MeshPaintSessionEntry> group)
+        {
+            if (group == null || group.Count == 0) return false;
+
+            var rep = group[0];
+            var s = rep.Session;
+            if (s == null || !s.IsActive || s.BakedOrigin == null) return false;
+
+            // 1. Combine every member's ops onto rep's BakedOrigin.
+            var combined = (Color[])s.BakedOrigin.Clone();
+            foreach (var member in group)
+            {
+                var ms = member.Session;
+                if (ms == null || !ms.IsActive) continue;
+                foreach (var op in member.Ops)
+                {
+                    combined = MeshPaintOpApplier.Apply(
+                        combined, op, s.Width, s.Height,
+                        ms.CachedMesh, ms.CachedIslands, ms.CachedIslandGroups);
+                }
+            }
+
+            // 2. Push combined pixels onto rep's preview, then commit via the rep.
+            s.ApplyPreview(combined);
+
+            Material sharedMat;
+            if (_useMANonDestructive)
+            {
+                if (!MeshPaintMACommitter.Apply(rep, _avatarRoot)) return false;
+                string variantPath = $"{PackagePaths.GetGeneratedDir("Materials")}/{s.AvatarName}/{s.CustomizedMat.name}_MA.mat";
+                sharedMat = AssetDatabase.LoadAssetAtPath<Material>(variantPath);
+            }
+            else
+            {
+                if (!CommitEntryDestructive(rep)) return false;
+                sharedMat = s.CustomizedMat;
+            }
+
+            if (sharedMat == null)
+            {
+                Debug.LogError("[MeshPainterV2] Shared commit succeeded but shared material could not be resolved.");
+                return false;
+            }
+
+            // 3. Re-point every other member's renderer to the shared material.
+            foreach (var member in group)
+            {
+                if (member == rep) continue;
+                if (member.Renderer == null) continue;
+                if (_useMANonDestructive)
+                {
+                    MAComponentFactory.AddOrUpdateMaterialSetter(
+                        member.Renderer.gameObject, member.Renderer, member.MaterialSlot, sharedMat);
+                }
+                else
+                {
+                    TextureEditTools.SetMaterialAtIndex(member.Renderer, member.MaterialSlot, sharedMat);
+                }
+            }
+
+            // 4. Collect orphan-candidate materials from non-rep members BEFORE
+            // disposing. After dispose + re-point, these _Customized assets are
+            // no longer referenced by any renderer in the group; we'll verify
+            // that with an avatar-wide scan and delete the safely-orphaned ones.
+            var orphanCandidates = new List<Material>();
+            foreach (var member in group)
+            {
+                if (member == rep) continue;
+                var mat = member.Session?.CustomizedMat;
+                if (mat != null && mat != sharedMat)
+                    orphanCandidates.Add(mat);
+            }
+
+            // 5. Dispose every member in the group (including rep). Subsequent
+            // edits will lazily re-Begin against the shared material — by then
+            // its name already ends with "_Customized" so Session.Begin reuses
+            // the shared asset instead of forking a new one.
+            var toDispose = new List<MeshPaintSessionEntry>(group);
+            foreach (var m in toDispose)
+                _sessionManager.DropEntry(m);
+
+            // 6. Cleanup orphan _Customized materials with multiple safety
+            // checks so we never delete user-authored or still-referenced assets.
+            bool anyDeleted = false;
+            foreach (var orphan in orphanCandidates)
+            {
+                if (TryDeleteOrphanCustomizedMaterial(orphan)) anyDeleted = true;
+            }
+            if (anyDeleted)
+            {
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Safely delete an orphaned <c>_Customized</c> material asset created by
+        /// a Mesh Painter session that has since been re-pointed to a shared
+        /// material. Returns true only if the asset was actually deleted.
+        ///
+        /// Safety gates (all must pass):
+        /// <list type="bullet">
+        ///   <item>Asset path resolves and lives under <c>Generated/Materials/</c>
+        ///         (so we only ever delete plugin-managed assets).</item>
+        ///   <item>No renderer under the active avatar still references it.</item>
+        ///   <item>No MA <c>MaterialSetter</c> under the avatar references it.</item>
+        ///   <item>The avatar root is known (null root → bail, scope unclear).</item>
+        /// </list>
+        /// </summary>
+        private bool TryDeleteOrphanCustomizedMaterial(Material orphan)
+        {
+            if (orphan == null) return false;
+            if (_avatarRoot == null) return false;
+
+            string path = AssetDatabase.GetAssetPath(orphan);
+            if (string.IsNullOrEmpty(path)) return false;
+            // Only touch plugin-generated material assets.
+            if (path.Replace("\\", "/").IndexOf("/Generated/Materials/", System.StringComparison.Ordinal) < 0)
+                return false;
+
+            if (IsMaterialReferencedByAvatar(orphan, _avatarRoot)) return false;
+            if (MAComponentFactory.IsMaterialReferencedByMaterialSetters(orphan, _avatarRoot)) return false;
+
+            return AssetDatabase.DeleteAsset(path);
+        }
+
+        /// <summary>
+        /// Walk every renderer under <paramref name="avatarRoot"/> and return true
+        /// if any of their <c>sharedMaterials</c> still points at <paramref name="mat"/>.
+        /// </summary>
+        private static bool IsMaterialReferencedByAvatar(Material mat, GameObject avatarRoot)
+        {
+            if (mat == null || avatarRoot == null) return false;
+            foreach (var r in avatarRoot.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = r.sharedMaterials;
+                if (mats == null) continue;
+                for (int i = 0; i < mats.Length; i++)
+                    if (mats[i] == mat) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Destructive commit of a single entry: the preview texture (already
-        /// reflecting BakedOrigin + all ops) is written to disk and assigned
-        /// back to the material. Reuses <see cref="MeshPaintPreviewSession.Commit"/>
-        /// which also moves BakedOrigin forward.
+        /// reflecting BakedOrigin + all ops) is written to disk and assigned back
+        /// to the material. <see cref="MeshPaintPreviewSession.Commit"/> no longer
+        /// advances BakedOrigin, so ops remain editable across multiple commits.
         /// </summary>
         private bool CommitEntryDestructive(MeshPaintSessionEntry entry)
         {
@@ -1071,10 +1305,11 @@ namespace AjisaiFlow.UnityAgent.Editor
             var s = entry.Session;
             if (s == null || !s.IsActive) return false;
 
-            // Session.Commit() only flushes when HasUncommittedChanges is true.
-            // After ReplayAll the flag may be clear even though Ops > 0, so mark
-            // the preview as dirty by forcing a tiny re-apply.
-            if (!s.HasUncommittedChanges && entry.Ops.Count > 0)
+            // Session.Commit() short-circuits on !HasUncommittedChanges. After
+            // ReplayAll / op removal the flag is clear but the on-disk PNG is
+            // still stale, so force a re-apply of the current baseline to make
+            // the commit go through regardless of op count.
+            if (!s.HasUncommittedChanges)
                 s.ApplyPreview(s.BaselinePixels);
 
             return s.Commit();

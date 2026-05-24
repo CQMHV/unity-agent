@@ -331,6 +331,26 @@ namespace AjisaiFlow.UnityAgent.Editor.MA
         // ========== MaterialSetter ==========
 
         /// <summary>
+        /// Returns true if any <c>ModularAvatarMaterialSetter</c> under
+        /// <paramref name="avatarRoot"/> references <paramref name="material"/>.
+        /// Used by Mesh Painter orphan-cleanup to avoid deleting a material that
+        /// is still in use by an MA swap entry elsewhere on the avatar.
+        /// </summary>
+        public static bool IsMaterialReferencedByMaterialSetters(Material material, GameObject avatarRoot)
+        {
+            if (material == null || avatarRoot == null) return false;
+            foreach (var setter in avatarRoot.GetComponentsInChildren<ModularAvatarMaterialSetter>(true))
+            {
+                if (setter?.Objects == null) continue;
+                foreach (var obj in setter.Objects)
+                {
+                    if (obj != null && obj.Material == material) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Create or update a <c>ModularAvatarMaterialSetter</c> on <paramref name="host"/>
         /// that assigns <paramref name="material"/> to slot <paramref name="materialIndex"/>
         /// on <paramref name="targetRenderer"/> at MA build time.
@@ -559,6 +579,7 @@ namespace AjisaiFlow.UnityAgent.Editor.MA
         public static bool HasVisibleHeadAccessory(GameObject go) => false;
         public static void SetupOutfit(GameObject o) { }
         public static Component AddOrUpdateMaterialSetter(GameObject h, Renderer r, int i, Material m) => null;
+        public static bool IsMaterialReferencedByMaterialSetters(Material material, GameObject avatarRoot) => false;
         public static bool RemoveComponent(GameObject t, string c) => false;
         public static Component[] GetAllMAComponents(GameObject r) => new Component[0];
         public static string GetMAComponentTypeName(Component c) => c.GetType().Name;

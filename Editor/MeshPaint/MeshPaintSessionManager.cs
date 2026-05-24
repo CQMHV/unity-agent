@@ -35,15 +35,16 @@ namespace AjisaiFlow.UnityAgent.Editor.MeshPaint
         }
 
         /// <summary>
-        /// Foreground <paramref name="entry"/>. Suspends the previously-active
-        /// entry's preview (restores original texture on its material) and
-        /// resumes the new one (installs its preview texture).
+        /// Foreground <paramref name="entry"/>. The previously-active entry
+        /// keeps its preview texture installed on its material so its committed
+        /// ops stay visible while the user edits another mesh — only the
+        /// in-progress slider draft (if any) is dropped via Revert.
         /// </summary>
         public void SetActive(MeshPaintSessionEntry entry)
         {
             if (Active == entry) return;
             if (Active != null)
-                Active.Session.Suspend();
+                Active.Session.Revert();
             Active = entry;
             if (Active != null)
                 Active.Session.Resume();

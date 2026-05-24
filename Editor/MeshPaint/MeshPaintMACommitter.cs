@@ -46,11 +46,35 @@ namespace AjisaiFlow.UnityAgent.Editor.MeshPaint
                 return false;
             }
 
-            // 2. Create material variant pointing at the saved PNG.
-            var variant = new Material(s.CustomizedMat) { name = s.CustomizedMat.name + "_MA" };
-            variant.mainTexture = savedTex;
-            string matPath = ToolUtility.SaveMaterialAsset(variant, s.AvatarName);
+            // 2. Create or update the material variant pointing at the saved PNG.
+            // Use a deterministic path keyed off (avatar, variantName) so repeated
+            // applies overwrite the same asset instead of producing "Foo_MA 1.mat",
+            // "Foo_MA 2.mat", etc. — important now that op lists survive commits.
+            string variantName = s.CustomizedMat.name + "_MA";
+            string folder = $"{PackagePaths.GetGeneratedDir("Materials")}/{s.AvatarName}";
+            if (!System.IO.Directory.Exists(folder))
+                System.IO.Directory.CreateDirectory(folder);
+            string matPath = $"{folder}/{variantName}.mat";
+
             var matAsset = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (matAsset == null)
+            {
+                var variant = new Material(s.CustomizedMat) { name = variantName };
+                variant.mainTexture = savedTex;
+                AssetDatabase.CreateAsset(variant, matPath);
+                matAsset = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            }
+            else
+            {
+                // Re-sync the existing variant with the current customized material's
+                // properties (shader, colors, etc.) and the freshly-saved texture.
+                var fresh = new Material(s.CustomizedMat);
+                EditorUtility.CopySerialized(fresh, matAsset);
+                matAsset.name = variantName;
+                matAsset.mainTexture = savedTex;
+                EditorUtility.SetDirty(matAsset);
+                Object.DestroyImmediate(fresh);
+            }
             if (matAsset == null)
             {
                 Debug.LogError("[MeshPaintMACommitter] Failed to save material variant at " + matPath);

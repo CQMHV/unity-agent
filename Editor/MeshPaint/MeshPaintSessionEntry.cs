@@ -23,6 +23,17 @@ namespace AjisaiFlow.UnityAgent.Editor.MeshPaint
         public Renderer Renderer;
         public int MaterialSlot;
 
+        /// <summary>
+        /// True when the preview / op list has changed since the last successful
+        /// commit (or since session start, if never committed). Drives "すべて適用"
+        /// — it must re-write the PNG even when Ops.Count drops to zero so that
+        /// removing all ops after a commit actually undoes the on-disk change.
+        /// </summary>
+        public bool IsDirtyForCommit { get; private set; }
+
+        public void MarkDirtyForCommit() => IsDirtyForCommit = true;
+        public void MarkCleanForCommit() => IsDirtyForCommit = false;
+
         public bool IsStarted => Session.IsActive;
 
         public bool Begin(Renderer r, GameObject avatarRoot, int slot)
@@ -74,6 +85,7 @@ namespace AjisaiFlow.UnityAgent.Editor.MeshPaint
         {
             if (op == null || op.IsNoop()) return;
             Ops.Add(op);
+            IsDirtyForCommit = true;
             ReplayAll();
         }
 
@@ -81,6 +93,7 @@ namespace AjisaiFlow.UnityAgent.Editor.MeshPaint
         {
             if (index < 0 || index >= Ops.Count) return false;
             Ops.RemoveAt(index);
+            IsDirtyForCommit = true;
             ReplayAll();
             return true;
         }
@@ -89,6 +102,7 @@ namespace AjisaiFlow.UnityAgent.Editor.MeshPaint
         {
             if (Ops.Count == 0) return;
             Ops.Clear();
+            IsDirtyForCommit = true;
             ReplayAll();
         }
 

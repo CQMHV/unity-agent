@@ -16,8 +16,11 @@ namespace AjisaiFlow.UnityAgent.Editor
     ///                    Sets HasUncommittedChanges = true.
     ///   Revert()       — reset preview texture back to baseline. Clears uncommitted flag.
     ///   Commit()       — encode preview to PNG, save via TextureUtility.SaveTexture,
-    ///                    update metadata, point material at saved texture, then refresh
-    ///                    baseline from the new state. Clears uncommitted flag.
+    ///                    update metadata, point material at saved texture. The
+    ///                    BakedOrigin and BaselinePixels are NOT advanced — ops in the
+    ///                    edit list remain editable after commit so the user can revisit
+    ///                    them; future commits re-bake the full BakedOrigin + Ops chain.
+    ///                    Clears uncommitted flag.
     ///   End()          — clean up preview texture and restore the material to the
     ///                    currently-committed state. Auto-commit if requested.
     ///
@@ -184,8 +187,10 @@ namespace AjisaiFlow.UnityAgent.Editor
         }
 
         /// <summary>
-        /// Flush preview to disk, update the material to point at the saved asset, and
-        /// move the baseline forward so further edits stack on top.
+        /// Flush preview to disk and update the material to point at the saved asset.
+        /// Leaves BakedOrigin and BaselinePixels untouched so the caller's op list
+        /// stays valid and replayable; the user can keep editing committed ops and
+        /// re-press "すべて適用" to overwrite the saved PNG with the new chain.
         /// </summary>
         public bool Commit()
         {
@@ -227,11 +232,12 @@ namespace AjisaiFlow.UnityAgent.Editor
 
             EditorUtility.SetDirty(CustomizedMat);
 
-            // Baseline forward so next edits layer on top. BakedOrigin also moves
-            // forward here — a destructive commit is the only way the "origin" of
-            // the Op replay is allowed to change during a session.
-            BaselinePixels = PreviewTexture.GetPixels();
-            BakedOrigin = (Color[])BaselinePixels.Clone();
+            // Intentionally do NOT advance BakedOrigin or BaselinePixels here.
+            // Keeping the origin pinned means the op list stays editable across
+            // multiple commits — the user can remove or add ops after pressing
+            // "すべて適用" and the next commit will re-bake from the same origin
+            // with the updated op chain. The saved-on-disk PNG is overwritten
+            // each commit, so the asset stays in sync with the current op list.
             HasUncommittedChanges = false;
 
             // Re-point material at the in-memory preview so further slider edits remain live.
