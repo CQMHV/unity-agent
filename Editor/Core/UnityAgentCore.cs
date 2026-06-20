@@ -426,8 +426,13 @@ namespace AjisaiFlow.UnityAgent.Editor
         {
             if (_isProcessing)
             {
-                onDebugLog?.Invoke("[UnityAgentCore] Already processing a request. Ignoring new query.");
-                yield break;
+                // 状態整合: 前回の処理が完了通知なしで残っている（Provider 例外、coroutine 中断、
+                // タイムアウト後の未リセット等）と、ユーザーには送信ボタンが見えているのに次の送信が
+                // silent yield break で消える「応答なし」バグになる。自動でキャンセルして救済する。
+                AgentLogger.Warning(LogTag.Core,
+                    "ProcessUserQuery called while still processing — auto-cancelling previous request to recover.");
+                onDebugLog?.Invoke("[UnityAgentCore] Auto-cancelling stuck previous request before new send.");
+                Cancel();
             }
 
             _isProcessing = true;
@@ -489,9 +494,16 @@ namespace AjisaiFlow.UnityAgent.Editor
             const int MAX_POLL_FRAMES = 60 * 600;
             int pollCount = 0;
             while (_isProcessing && pollCount++ < MAX_POLL_FRAMES) yield return null;
-            if (pollCount >= MAX_POLL_FRAMES)
+            if (pollCount >= MAX_POLL_FRAMES && _isProcessing)
             {
-                Debug.LogError($"[UnityAgentCore] ProcessUserQuery polling exceeded {MAX_POLL_FRAMES} frames; forcing turn-complete fire to prevent infinite loop.");
+                // タイムアウト時の救済: _isProcessing を強制 false にして UI を解放し、
+                // ユーザーに最終通知を送る。これをしないと UI が永久に「処理中」表示で stuck する。
+                AgentLogger.Error(LogTag.Core,
+                    $"ProcessUserQuery polling exceeded {MAX_POLL_FRAMES} frames; forcing _isProcessing=false and notifying UI.");
+                _isProcessing = false;
+                _provider?.Abort();
+                if (!turnFired)
+                    onReplyReceived?.Invoke("Error: 応答待ちがタイムアウトしました。通信が切れた可能性があります。再度お試しください。", true);
             }
 
             // ここまで来て turnFired==false なら、error path (isFinal=false) かキャンセルで終わったケース。
@@ -678,9 +690,24 @@ namespace AjisaiFlow.UnityAgent.Editor
             else
             {
                 onDebugLog?.Invoke($"[UnityAgentCore] No tool call detected. Invoking onReplyReceived.");
-                string finalText = string.IsNullOrWhiteSpace(historyText) && string.IsNullOrWhiteSpace(responseText)
-                    ? "（LLMから空の応答を受け取りました。再度お試しください。）"
-                    : responseText;
+                // 「思考だけで終わるバグ」対策:
+                // historyText は <Thinking> タグや [Tokens: ...] を除去した本文部分。
+                // ここが空 = LLM が thinking のみ返した / 完全に空応答だった ケース。
+                // responseText だけで判定すると <Thinking>...</Thinking>[Tokens:...] が non-empty として通過し、
+                // ExtractThinking 後に text="" の空 bubble が出るだけでユーザーは何が起きたか分からない。
+                string finalText;
+                if (string.IsNullOrWhiteSpace(historyText))
+                {
+                    string notice = "（LLMから本文応答がありませんでした。再度お試しください。）";
+                    // Thinking 部分は残してユーザーに参考表示できるよう、responseText の末尾に案内文を付ける。
+                    finalText = string.IsNullOrEmpty(responseText)
+                        ? notice
+                        : responseText.TrimEnd() + "\n\n" + notice;
+                }
+                else
+                {
+                    finalText = responseText;
+                }
                 onReplyReceived?.Invoke(finalText, true);
                 _isProcessing = false;
             }

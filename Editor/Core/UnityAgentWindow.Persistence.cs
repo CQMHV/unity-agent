@@ -584,7 +584,8 @@ namespace AjisaiFlow.UnityAgent.Editor
                     onReplyReceived: callbacks.OnReply,
                     onStatus: callbacks.OnStatus,
                     onDebugLog: callbacks.OnDebugLog,
-                    onPartialResponse: callbacks.OnPartial
+                    onPartialResponse: callbacks.OnPartial,
+                    onStreamEvent: callbacks.OnStreamEvent
                 );
                 var handle = EditorCoroutineUtility.StartCoroutineOwnerless(routine);
                 _agent.SetRootCoroutine(handle);

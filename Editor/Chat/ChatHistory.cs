@@ -12,6 +12,17 @@ namespace AjisaiFlow.UnityAgent.Editor
         public int type;
         public string text;
         public string thinkingText;
+
+        // ── ToolCall fields ──
+        // 旧フォーマット (これらが欠落) との互換: JsonUtility はデフォルト値で読むため、
+        // Load 側で toolStatus==Running を Cancelled に変換することで対応する。
+        public string toolCallId;
+        public string toolName;
+        public string toolArgsRaw;
+        public string toolResult;
+        public int toolStatus;       // ToolCallStatus (int)
+        public long toolDurationMs;
+        public string toolCategory;
     }
 
     [Serializable]
@@ -42,7 +53,14 @@ namespace AjisaiFlow.UnityAgent.Editor
                 {
                     type = (int)entry.type,
                     text = entry.text,
-                    thinkingText = entry.thinkingText
+                    thinkingText = entry.thinkingText,
+                    toolCallId = entry.toolCallId,
+                    toolName = entry.toolName,
+                    toolArgsRaw = entry.toolArgsRaw,
+                    toolResult = entry.toolResult,
+                    toolStatus = (int)entry.toolStatus,
+                    toolDurationMs = entry.toolDurationMs,
+                    toolCategory = entry.toolCategory,
                 });
 
                 if (title == null && entry.type == ChatEntry.EntryType.User)
@@ -139,8 +157,28 @@ namespace AjisaiFlow.UnityAgent.Editor
                 {
                     type = (ChatEntry.EntryType)record.type,
                     text = record.text,
-                    thinkingText = record.thinkingText
+                    thinkingText = record.thinkingText,
+                    toolCallId = record.toolCallId,
+                    toolName = record.toolName,
+                    toolArgsRaw = record.toolArgsRaw,
+                    toolResult = record.toolResult,
+                    toolStatus = (ToolCallStatus)record.toolStatus,
+                    toolDurationMs = record.toolDurationMs,
+                    toolCategory = record.toolCategory,
                 };
+
+                // 旧フォーマット (toolStatus 未保存) では int=0=Running になり、
+                // 履歴復元時にツールカードが永久に「実行中」表示で ticker が回ってしまう。
+                // 進行中のまま保存されたケース (Window 強制クローズ等) も含めて Cancelled に救済。
+                // snapshot 復元 (UnityAgentWindow.Persistence.cs) と同じ修正パターン。
+                if (entry.type == ChatEntry.EntryType.ToolCall &&
+                    entry.toolStatus == ToolCallStatus.Running)
+                {
+                    entry.toolStatus = ToolCallStatus.Cancelled;
+                    if (string.IsNullOrEmpty(entry.toolResult))
+                        entry.toolResult = "（履歴復元時に中断状態として記録されました）";
+                }
+
                 entries.Add(entry);
             }
 
