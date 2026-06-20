@@ -34,6 +34,11 @@
     "defineConstraints": [],
     "versionDefines": [
         {
+            "name": "nadena.dev.ndmf",
+            "expression": "",
+            "define": "NDMF"
+        },
+        {
             "name": "nadena.dev.modular-avatar",
             "expression": "",
             "define": "MODULAR_AVATAR"

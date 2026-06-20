@@ -2,7 +2,9 @@ using System;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+#if NDMF
 using nadena.dev.ndmf;
+#endif
 
 using AjisaiFlow.UnityAgent.SDK;
 
@@ -21,6 +23,8 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
     /// </list>
     /// VRC SDK is reached through reflection so the tool stays compatible with environments where
     /// VRC.SDKBase is absent (the call gracefully reports a single error line instead of throwing).
+    /// The NDMF section is compile-guarded behind the <c>NDMF</c> versionDefine, so the tool also
+    /// builds in projects without NDMF (the parameter budget section reports it is unavailable).
     /// </summary>
     public static class AvatarPerformanceAnalyzer
     {
@@ -173,6 +177,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
         private static void AppendNdmfParameterBudget(StringBuilder sb, GameObject go)
         {
+#if NDMF
             try
             {
                 var paramInfo = nadena.dev.ndmf.ParameterInfo.ForUI;
@@ -200,6 +205,10 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             {
                 sb.AppendLine($"  Error reading NDMF ParameterInfo: {ex.GetType().Name}: {ex.Message}");
             }
+#else
+            sb.AppendLine("  NDMF (nadena.dev.ndmf) is not installed; parameter budget unavailable.");
+            sb.AppendLine("  Install NDMF (Non-Destructive Modular Framework) to enable post-build parameter analysis.");
+#endif
         }
 
         // ─── Helpers ───
