@@ -346,7 +346,7 @@
     "RunEditorScript": "作为最后的手段在编辑器中执行任意 C# 代码，用于现有工具无法涵盖的操作。代码在静态 Execute() 方法内运行。使用 'return' 返回结果字符串。始终需要用户确认。",
     "ListSkills": "列出所有可用的技能规范（Skill specifications）。技能是描述复杂多步操作（如 Avatar 构建、包设置、优化）的 .md 文件。使用 ReadSkill 获取技能的完整指令。",
     "ReadSkill": "按名称读取技能规范文件（不含 .md 扩展名）。返回执行所述操作的完整指令。示例：ReadSkill('avatar-build')",
-    "CreateSkill": "创建一个新的自定义技能规范文件。参数：skillName（kebab-case 命名，如 'my-new-skill'）、title（显示名称）、description（单行摘要）、tags（以逗号分隔）、body（包含工作流步骤、工具调用示例、注意事项的 Markdown 内容）。正文应遵循标准技能格式：## 概要、## 步骤、## 工具调用示例、## 注意事项。示例：CreateSkill('my-skill', '我的技能', '描述文本', 'tag1, tag2', '## 概要\\\n...')",
+    "CreateSkill": "创建一个新的自定义技能规范文件。参数：skillName（kebab-case 命名，如 'my-new-skill'）、title（显示名称）、description（单行摘要）、tags（以逗号分隔）、body（包含工作流步骤、工具调用示例、注意事项的 Markdown 内容）。正文应遵循标准技能格式：## 概要、## 手順、## ツール呼び出し例、## 注意事項。示例：CreateSkill('my-skill', '我的技能', '描述文本', 'tag1, tag2', '## 概要\\\n...')",
     "UpdateSkill": "更新现有的自定义技能规范文件。任何设为空字符串的参数将保持当前值。若仅更新正文，请为 title/description/tags 传递空字符串。也可以通过创建同名的自定义文件来覆盖内置技能。示例：UpdateSkill('my-skill', '', '', '', '## 概要\\\n新内容')",
     "DeleteSkill": "删除自定义技能规范文件。仅能删除用户自定义技能（磁盘上）。内置技能无法删除。示例：DeleteSkill('my-skill')",
     "GetSkillTemplate": "获取展示创建技能标准格式的技能模板。在调用 CreateSkill 前使用此工具了解预期结构。",

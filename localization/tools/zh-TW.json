@@ -346,7 +346,7 @@
     "RunEditorScript": "作為最後手段在 Editor 中執行任意 C# 程式碼（當沒有現成工具可涵蓋該操作時）。程式碼在靜態 Execute() 方法內執行。使用 'return' 回傳結果字串。務必需要使用者確認。",
     "ListSkills": "列出所有可用的 Skill 規範。Skill 是描述複雜多步驟操作（例如建置 Avatar、套件設定、優化）的 .md 檔案。使用 ReadSkill 獲取 Skill 的完整說明。",
     "ReadSkill": "按名稱讀取 Skill 規範檔案（不含 .md 副檔名）。回傳執行該操作的完整指令。範例：ReadSkill('avatar-build')",
-    "CreateSkill": "建立新的自定義 Skill 規範檔案。參數：skillName (kebab-case，例如 'my-new-skill')、title (顯示名稱)、description (單行摘要)、tags (逗號分隔)、body (包含工作流步驟、工具呼叫範例、注意事項的 Markdown 內容)。Body 應遵循標準 Skill 格式：## 概要、## 步驟、## 工具呼叫範例、## 注意事項。範例：CreateSkill('my-skill', '我的技能', '說明文', 'tag1, tag2', '## 概要\\\n...')",
+    "CreateSkill": "建立新的自定義 Skill 規範檔案。參數：skillName (kebab-case，例如 'my-new-skill')、title (顯示名稱)、description (單行摘要)、tags (逗號分隔)、body (包含工作流步驟、工具呼叫範例、注意事項的 Markdown 內容)。Body 應遵循標準 Skill 格式：## 概要、## 手順、## ツール呼び出し例、## 注意事項。範例：CreateSkill('my-skill', '我的技能', '說明文', 'tag1, tag2', '## 概要\\\n...')",
     "UpdateSkill": "更新現有的自定義 Skill 規範檔案。任何設為空字串的參數將保留目前值。若僅更新 Body，請為 title/description/tags 傳入空字串。也可透過建立同名檔案來覆蓋內建 Skill。範例：UpdateSkill('my-skill', '', '', '', '## 概要\\\n新內容')",
     "DeleteSkill": "刪除自定義 Skill 規範檔案。僅能刪除磁碟上的使用者自定義 Skill。內建 Skill 無法刪除。範例：DeleteSkill('my-skill')",
     "GetSkillTemplate": "獲取 Skill 範本，顯示建立 Skill 的標準格式。用於在呼叫 CreateSkill 前理解預期結構。",
