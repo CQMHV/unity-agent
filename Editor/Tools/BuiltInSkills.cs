@@ -64,7 +64,7 @@ Tell the user:
 ## Performance Rank Thresholds (PC)
 | Category | Excellent | Good | Medium | Poor |
 |----------|-----------|------|--------|------|
-| Polygons | ≤32,000 | ≤70,000 | ≤120,000 | ≤200,000 |
+| Triangles | ≤32,000 | ≤70,000 | ≤70,000 | ≤70,000 |
 | Materials | ≤4 | ≤8 | ≤16 | ≤32 |
 | PhysBone | ≤4 | ≤8 | ≤16 | ≤32 |
 | Bones | ≤75 | ≤150 | ≤256 | ≤400 |
@@ -129,7 +129,7 @@ Used for making weapons or accessories follow the hand or Head.
    ```
 
 3. Prevent body mesh clipping:
-   - Use AAO's Remove Mesh in Box to remove body mesh under the clothing
+   - Use AAO's Remove Mesh By Box to remove body mesh under the clothing
    - Or use BlendShapes to shrink the body
 
 4. Material adjustments:
@@ -152,7 +152,7 @@ tags: FaceEmo, expression, Expression Menu, gesture, non-destructive
 ## Overview
 FaceEmo (`jp.suzuryg.face-emo`) is a non-destructive expression menu tool for VRChat Avatars 3.0.
 It manages gesture-to-AnimationClip switching and generates FX layers via NDMF/Modular Avatar.
-- **Registered** expressions: max **7** (shown in Expression Menu)
+- **Registered** expressions: max **6** (shown in Expression Menu; a folder counts as 1 slot and holds up to 8)
 - **Unregistered** expressions: unlimited (not in menu, gesture-only)
 
 ## ⚠️ CRITICAL RULES (NEVER VIOLATE)
@@ -479,7 +479,7 @@ If the preset's confidence is low (< 0.5), fall back to Workflow C with
 `SearchExpressionShapesV2('Avatar', 'eye,mouth,brow')` to inspect categorized shapes manually.
 
 ## Important Notes
-- **Registered max 7**: Exceeding this causes an error. Use Unregistered or groups.
+- **Registered max 6**: Exceeding this causes an error. Use a folder (1 slot, holds up to 8) or Unregistered.
 - **Avatar=None**: Use ConfigureTargetAvatar to resolve. Check with FindFaceEmo first.
 - **NEVER guess mesh or BlendShape names** — call AnalyzeFaceBlendShapes first; use Suggest/SearchV2.
 - **Values 0-100, NEVER 0-1**. SetExpressionPreviewMulti will reject `0.8`-style inputs with a clear error.
@@ -548,17 +548,18 @@ Primarily uses Avatar Optimizer (AAO) and the NDMF framework.
 | Triangles | 7,500 | 10,000 | 15,000 | 20,000 |
 | Texture Memory | 10 MB | 18 MB | 25 MB | 40 MB |
 | Skinned Meshes | 1 | 1 | 2 | 2 |
-| Basic Meshes | 1 | 1 | 2 | 4 |
+| Basic Meshes | 1 | 1 | 2 | 2 |
 | Material Slots | 1 | 1 | 2 | 4 |
 | PhysBones | 0 | 4 | 6 | 8 |
 | PB Transforms | 0 | 16 | 32 | 64 |
 | PB Colliders | 0 | 4 | 8 | 16 |
 | PB Collision Check | 0 | 16 | 32 | 64 |
-| Contacts | 0 | 4 | 8 | 16 |
-| Animators | 1 | 1 | 2 | 2 |
+| Contacts | 2 | 4 | 8 | 16 |
+| Animators | 1 | 1 | 1 | 2 |
 | Bones | 75 | 90 | 150 | 150 |
-| Particle Systems | 0 | 0 | 0 | 0 |
-| Audio Sources | 1 | 1 | 4 | 4 |
+| Particle Systems | 0 | 0 | 0 | 2 |
+| Total Particles Active | 0 | 0 | 0 | 200 |
+| Mesh Particle Active Polys | 0 | 0 | 0 | 400 |
 
 ## AAO (Avatar Optimizer) Key Components
 
@@ -580,7 +581,7 @@ Steps:
 3. Configure target Renderers
 ```
 
-### Remove Mesh in Box / By BlendShape
+### Remove Mesh By Box / By BlendShape
 Removes invisible mesh portions to reduce polygon count.
 - Used when removing body mesh under clothing
 - Removes parts hidden by BlendShapes
@@ -680,15 +681,15 @@ tags: VRChat, Animator, Parameters, Expression, sync
 | `VRMode` | Int | 0=Desktop, 1=VR | IK |
 | `MuteSelf` | Bool | Self-muted | Playable |
 | `InStation` | Bool | In a station | IK |
-| `Earmuffs` | Bool | Earmuffs enabled | None |
-| `IsOnFriendsList` | Bool | On friends list | None |
-| `AvatarVersion` | Int | Avatar version (SDK auto-set) | None |
+| `Earmuffs` | Bool | Earmuffs enabled | Playable |
+| `IsOnFriendsList` | Bool | On friends list | Other |
+| `AvatarVersion` | Int | 3 if built with SDK3 (2020.3.2+), else 0 | IK |
 | `IsAnimatorEnabled` | Bool | Whether Animator is enabled | None |
-| `ScaleModified` | Float | Scale modification ratio | IK |
-| `ScaleFactor` | Float | Eye height scale | IK |
-| `ScaleFactorInverse` | Float | Inverse of ScaleFactor | IK |
-| `EyeHeightAsMeters` | Float | Eye height (meters) | IK |
-| `EyeHeightAsPercent` | Float | Eye height (0.01-100%) | IK |
+| `ScaleModified` | Bool | True if avatar is being scaled, false at default size | Playable |
+| `ScaleFactor` | Float | Eye height scale | Playable |
+| `ScaleFactorInverse` | Float | Inverse of ScaleFactor | Playable |
+| `EyeHeightAsMeters` | Float | Eye height (meters) | Playable |
+| `EyeHeightAsPercent` | Float | Eye height normalized within 0.2m–5.0m: (h-0.2)/4.8, range ~0.0–1.0 | Playable |
 
 ### Gesture Values (GestureLeft/GestureRight)
 | Value | Gesture |
@@ -707,11 +708,11 @@ tags: VRChat, Animator, Parameters, Expression, sync
 |-------|-------------|
 | 0 | Uninitialized |
 | 1 | Generic Rig |
-| 2 | No finger tracking (3pt) |
-| 3 | Head and hands (3pt + finger) |
-| 4 | 4pt VR |
-| 5 | Head + Hands + Feet (5pt) |
-| 6 | Full Body (FBT) |
+| 2 | Hands-only, no fingers (transient state) |
+| 3 | Head and hands (3-point VR) |
+| 4 | Head + Hands + Hip (4-point VR) |
+| 5 | Head + Hands + Feet (5-point, no hip) |
+| 6 | Full Body (Head + Hands + Hip + Feet) |
 
 ## Sync Types
 
@@ -721,6 +722,7 @@ tags: VRChat, Animator, Parameters, Expression, sync
 | **Playable** | Used in Playable layer. Animator state sync |
 | **IK** | Sent with IK data. Position/tracking related |
 | **None** | No sync. Local only |
+| **Other** | Synced via a dedicated channel (e.g. friends-list state) |
 
 ## Custom Parameters
 
@@ -1257,7 +1259,7 @@ User: ""Create a smile animation""
 ## Notes
 - Bone names differ per avatar, so always verify with `ListBones` before setting curves
 - Rotation values are local Euler angles. Dependent on parent bone orientation
-- Rotations exceeding 360° may cause gimbal lock issues
+- Gimbal lock is a singularity of Euler-angle representation (near a ±90° middle-axis rotation where two axes align) and is unrelated to how large the rotation is. Curves interpolate x/y/z independently, so values beyond 360° are valid; the only caveat for >360° is the interpolation path (angle wrapping), not gimbal lock
 - When using in VRChat's FX layer, pay attention to Write Defaults settings
 - Assign created clips to AnimatorController States using: `SetAnimatorStateMotion`" },
 

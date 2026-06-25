@@ -59,17 +59,20 @@ Primarily uses Avatar Optimizer (AAO) and the NDMF framework.
 | Triangles | 7,500 | 10,000 | 15,000 | 20,000 |
 | Texture Memory | 10 MB | 18 MB | 25 MB | 40 MB |
 | Skinned Meshes | 1 | 1 | 2 | 2 |
-| Basic Meshes | 1 | 1 | 2 | 4 |
+| Basic Meshes | 1 | 1 | 2 | 2 |
 | Material Slots | 1 | 1 | 2 | 4 |
 | PhysBones | 0 | 4 | 6 | 8 |
 | PB Transforms | 0 | 16 | 32 | 64 |
 | PB Colliders | 0 | 4 | 8 | 16 |
 | PB Collision Check | 0 | 16 | 32 | 64 |
-| Contacts | 0 | 4 | 8 | 16 |
-| Animators | 1 | 1 | 2 | 2 |
+| Contacts | 2 | 4 | 8 | 16 |
+| Animators | 1 | 1 | 1 | 2 |
 | Bones | 75 | 90 | 150 | 150 |
-| Particle Systems | 0 | 0 | 0 | 0 |
-| Audio Sources | 1 | 1 | 4 | 4 |
+| Particle Systems | 0 | 0 | 0 | 2 |
+| Total Particles Active | 0 | 0 | 0 | 200 |
+| Mesh Particle Active Polys | 0 | 0 | 0 | 400 |
+
+- On mobile, Lights / Cloths / Physics Colliders / Physics Rigidbodies / Audio Sources are force-disabled (always 0) and not ranked.
 
 ## AAO (Avatar Optimizer) Key Components
 
@@ -91,7 +94,7 @@ Steps:
 3. Configure target Renderers
 ```
 
-### Remove Mesh in Box / By BlendShape
+### Remove Mesh By Box / By BlendShape
 Removes invisible mesh portions to reduce polygon count.
 - Used when removing body mesh under clothing
 - Removes parts hidden by BlendShapes

@@ -166,6 +166,6 @@ User: "Create a smile animation"
 ## Notes
 - Bone names differ per avatar, so always verify with `ListBones` before setting curves
 - Rotation values are local Euler angles. Dependent on parent bone orientation
-- Rotations exceeding 360° may cause gimbal lock issues
+- Gimbal lock is a singularity of Euler-angle representation (it occurs near a ±90° middle-axis rotation where two axes align) and is unrelated to how large the rotation is. Animation curves interpolate x/y/z as independent scalars, so values beyond 360° are valid; the only caveat for >360° is the interpolation path (angle wrapping), not gimbal lock
 - When using in VRChat's FX layer, pay attention to Write Defaults settings
 - Assign created clips to AnimatorController States using: `SetAnimatorStateMotion`

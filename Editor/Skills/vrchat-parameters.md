@@ -44,15 +44,15 @@ tags: VRChat, Animator, Parameters, Expression, sync
 | `VRMode` | Int | 0=Desktop, 1=VR | IK |
 | `MuteSelf` | Bool | Self-muted | Playable |
 | `InStation` | Bool | In a station | IK |
-| `Earmuffs` | Bool | Earmuffs enabled | None |
-| `IsOnFriendsList` | Bool | On friends list | None |
-| `AvatarVersion` | Int | Avatar version (SDK auto-set) | None |
+| `Earmuffs` | Bool | Earmuffs enabled | Playable |
+| `IsOnFriendsList` | Bool | On friends list | Other |
+| `AvatarVersion` | Int | 3 if built with SDK3 (2020.3.2+), else 0 | IK |
 | `IsAnimatorEnabled` | Bool | Whether Animator is enabled | None |
-| `ScaleModified` | Float | Scale modification ratio | IK |
-| `ScaleFactor` | Float | Eye height scale | IK |
-| `ScaleFactorInverse` | Float | Inverse of ScaleFactor | IK |
-| `EyeHeightAsMeters` | Float | Eye height (meters) | IK |
-| `EyeHeightAsPercent` | Float | Eye height (0.01-100%) | IK |
+| `ScaleModified` | Bool | True if avatar is being scaled, false at default size | Playable |
+| `ScaleFactor` | Float | Eye height scale | Playable |
+| `ScaleFactorInverse` | Float | Inverse of ScaleFactor | Playable |
+| `EyeHeightAsMeters` | Float | Eye height (meters) | Playable |
+| `EyeHeightAsPercent` | Float | Eye height normalized within 0.2m–5.0m: (h-0.2)/4.8, range ~0.0–1.0 | Playable |
 
 ### Gesture Values (GestureLeft/GestureRight)
 | Value | Gesture |
@@ -71,11 +71,11 @@ tags: VRChat, Animator, Parameters, Expression, sync
 |-------|-------------|
 | 0 | Uninitialized |
 | 1 | Generic Rig |
-| 2 | No finger tracking (3pt) |
-| 3 | Head and hands (3pt + finger) |
-| 4 | 4pt VR |
-| 5 | Head + Hands + Feet (5pt) |
-| 6 | Full Body (FBT) |
+| 2 | Hands-only, no fingers (transient state) |
+| 3 | Head and hands (3-point VR) |
+| 4 | Head + Hands + Hip (4-point VR) |
+| 5 | Head + Hands + Feet (5-point, no hip) |
+| 6 | Full Body (Head + Hands + Hip + Feet) |
 
 ## Sync Types
 
@@ -85,6 +85,7 @@ tags: VRChat, Animator, Parameters, Expression, sync
 | **Playable** | Used in Playable layer. Animator state sync |
 | **IK** | Sent with IK data. Position/tracking related |
 | **None** | No sync. Local only |
+| **Other** | Synced via a dedicated channel (e.g. friends-list state) |
 
 ## Custom Parameters
 

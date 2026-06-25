@@ -110,6 +110,6 @@ Package: `jp.suzuryg.face-emo`
 
 ## Important Notes
 - Avatar=None issue: Resolve with ConfigureTargetAvatar. If FindFaceEmo shows None, run this first
-- Maximum 7 Registered items: Use Unregistered or groups if exceeding this limit
+- Maximum 6 Registered items shown in the Expression Menu (a folder/group counts as 1 slot and can hold up to 8 inside; Unregistered/Archive is unlimited): use a folder or Unregistered if exceeding this limit
 - FaceEmo works with NDMF/Modular Avatar to non-destructively generate FX layers
 - IMPORTANT: FaceEmo is exclusively for facial expressions (face BlendShapes). Use SetupObjectToggle for object toggles

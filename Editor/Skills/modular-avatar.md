@@ -53,7 +53,7 @@ Used for making weapons or accessories follow the hand or Head.
    ```
 
 3. Prevent body mesh clipping:
-   - Use AAO's Remove Mesh in Box to remove body mesh under the clothing
+   - Use AAO's Remove Mesh By Box to remove body mesh under the clothing
    - Or use BlendShapes to shrink the body
 
 4. Material adjustments:

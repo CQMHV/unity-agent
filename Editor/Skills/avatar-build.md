@@ -52,10 +52,12 @@ Tell the user:
 ## Performance Rank Thresholds (PC)
 | Category | Excellent | Good | Medium | Poor |
 |----------|-----------|------|--------|------|
-| Polygons | ≤32,000 | ≤70,000 | ≤120,000 | ≤200,000 |
+| Triangles | ≤32,000 | ≤70,000 | ≤70,000 | ≤70,000 |
 | Materials | ≤4 | ≤8 | ≤16 | ≤32 |
 | PhysBone | ≤4 | ≤8 | ≤16 | ≤32 |
 | Bones | ≤75 | ≤150 | ≤256 | ≤400 |
+
+**Note**: Triangles only distinguish Excellent (≤32,000) from the rest (≤70,000); Good/Medium/Poor share the 70,000 cap and exceeding 70,000 = Very Poor. For the full PC + Mobile threshold tables see the avatar-optimization skill.
 
 ## Troubleshooting
 - "SDK not found" → VRChat SDK package is not installed
