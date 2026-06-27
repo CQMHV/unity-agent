@@ -94,20 +94,19 @@ Package: `nadena.dev.modular-avatar`
 ### MA Merge Armature
 Non-destructively merges the outfit's Armature (bone structure) into the avatar's Armature.
 ```
-Steps:
-1. Place the outfit Prefab as a child of the avatar
-2. Add MA Merge Armature to the outfit's Armature object
-3. Bones are automatically merged at build time
+[AddMAMergeArmature('outfitName/Armature', 'avatarRootName/Armature', '', '')]
 ```
+- goName = the outfit's Armature object; mergeTargetName = the avatar's Armature (root bone).
+- If bone names don't match, pass prefix/suffix (e.g. suffix '.1' for bones named 'Hips.1').
+- Bones merge automatically at build time.
 
 ### MA Merge Animator
-Integrates animator layers into the avatar's FX layer.
+Integrates an Animator Controller into the avatar's FX layer (non-destructive).
 ```
-Steps:
-1. Prepare the gimmick's Animator Controller
-2. Add MA Merge Animator component
-3. Specify the target layer type (FX, etc.)
+[AddMAMergeAnimator('gimmickHolder', 'Assets/Anim/gimmick.controller', 0, true)]
 ```
+- Merges into the avatar's FX layer (MA default). pathMode 0=Absolute / 1=Relative.
+- matchWriteDefaults=true aligns Write Defaults with the avatar (keep WD consistent — see Notes).
 
 ### MA Menu Item / MA Parameters
 Non-destructively adds Expression Menu and Parameters.
@@ -115,6 +114,11 @@ Non-destructively adds Expression Menu and Parameters.
 ### MA Bone Proxy
 Non-destructively places objects as children of specific bones.
 Used for making weapons or accessories follow the hand or Head.
+```
+[AddMABoneProxy('weaponName', 'RightHand', 0)]
+```
+- To preserve the object's current world placement, run AlignAccessoryToBone first.
+- For ring/finger accessories, AttachRingWithBoneProxy is a convenience wrapper.
 
 ## General Outfit Setup Procedure
 
@@ -126,6 +130,10 @@ Used for making weapons or accessories follow the hand or Head.
 2. Verify MA Merge Armature is configured on the outfit's Armature:
    ```
    [InspectGameObject('avatarRootName/outfitName/Armature')]
+   ```
+   If it's missing, add it:
+   ```
+   [AddMAMergeArmature('avatarRootName/outfitName/Armature', 'avatarRootName/Armature', '', '')]
    ```
 
 3. Prevent body mesh clipping:

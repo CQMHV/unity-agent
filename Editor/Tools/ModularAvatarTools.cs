@@ -148,6 +148,75 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             return $"Success: Added MA parameter '{paramName}' (syncType={syncType}, default={defaultValue}, saved={saved}) to '{goName}'.";
         }
 
+        // ========== MA Merge Animator ==========
+
+        [AgentTool("Add a Modular Avatar Merge Animator to merge an AnimatorController into the avatar non-destructively (no manual edit of the avatar's playable layers). Merges into the avatar's FX layer (MA default) — use for toggles, gimmicks, and custom FX. controllerPath is the .controller asset path. pathMode: 0=Absolute, 1=Relative. matchWriteDefaults aligns Write Defaults with the avatar (recommended). deleteAttachedAnimator removes the temporary Animator after merge.")]
+        public static string AddMAMergeAnimator(string goName, string controllerPath, int pathMode = 0, bool matchWriteDefaults = true, bool deleteAttachedAnimator = true)
+        {
+            var err = MAAvailability.CheckOrError();
+            if (err != null) return err;
+
+            var go = FindGO(goName);
+            if (go == null)
+                return $"Error: GameObject '{goName}' not found.";
+
+            var controller = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(controllerPath);
+            if (controller == null)
+                return $"Error: AnimatorController not found at '{controllerPath}'.";
+
+            var comp = MAComponentFactory.AddMergeAnimator(go, controller, pathMode, matchWriteDefaults, deleteAttachedAnimator);
+            if (comp == null)
+                return "Error: Failed to add ModularAvatarMergeAnimator.";
+
+            return $"Success: Added ModularAvatarMergeAnimator to '{goName}' (controller='{controllerPath}', layer=FX, pathMode={(pathMode == 1 ? "Relative" : "Absolute")}, matchWriteDefaults={matchWriteDefaults}). The controller merges into the avatar's FX layer at build time.";
+        }
+
+        // ========== MA Merge Armature ==========
+
+        [AgentTool("Add a Modular Avatar Merge Armature to non-destructively merge an outfit's armature into the avatar's armature. goName is the outfit's Armature object; mergeTargetName is the avatar's Armature (root bone) to merge into. prefix/suffix resolve bone-name mismatches (e.g. outfit bones named 'Hips.1' -> suffix '.1'). Leave prefix/suffix empty when bone names match exactly.")]
+        public static string AddMAMergeArmature(string goName, string mergeTargetName, string prefix = "", string suffix = "")
+        {
+            var err = MAAvailability.CheckOrError();
+            if (err != null) return err;
+
+            var go = FindGO(goName);
+            if (go == null)
+                return $"Error: GameObject '{goName}' (outfit armature) not found.";
+
+            var mergeTarget = FindGO(mergeTargetName);
+            if (mergeTarget == null)
+                return $"Error: mergeTarget '{mergeTargetName}' (avatar armature) not found.";
+
+            var comp = MAComponentFactory.AddMergeArmature(go, mergeTarget.transform, prefix, suffix);
+            if (comp == null)
+                return "Error: Failed to add ModularAvatarMergeArmature.";
+
+            return $"Success: Added ModularAvatarMergeArmature to '{goName}' -> merges into '{mergeTargetName}' (prefix='{prefix}', suffix='{suffix}'). Bones merge at build time.";
+        }
+
+        // ========== MA Bone Proxy ==========
+
+        [AgentTool("Add a Modular Avatar Bone Proxy to non-destructively attach a GameObject (weapon/accessory/prop) to a specific avatar bone so it follows that bone. goName is the object to attach; targetBoneName is the avatar bone to follow (e.g. 'Head', 'RightHand'). mode: 0=AsChildAtRoot (recommended; snaps to the bone origin). Run AlignAccessoryToBone first if you need to preserve the object's current world placement.")]
+        public static string AddMABoneProxy(string goName, string targetBoneName, int mode = 0)
+        {
+            var err = MAAvailability.CheckOrError();
+            if (err != null) return err;
+
+            var go = FindGO(goName);
+            if (go == null)
+                return $"Error: GameObject '{goName}' not found.";
+
+            var bone = FindGO(targetBoneName);
+            if (bone == null)
+                return $"Error: Target bone '{targetBoneName}' not found.";
+
+            var comp = MAComponentFactory.AddBoneProxy(go, bone.transform, mode);
+            if (comp == null)
+                return "Error: Failed to add ModularAvatarBoneProxy.";
+
+            return $"Success: Added ModularAvatarBoneProxy to '{goName}' -> follows bone '{targetBoneName}' (mode={mode}). The object becomes a runtime child of that bone at build time.";
+        }
+
         // ========== 4. AddBlendshapeSync ==========
 
         [AgentTool("Add MA Blendshape Sync to sync blendshapes from a source mesh to a target mesh. Useful for syncing body shape keys (e.g. breast size) to outfit meshes. targetGoName must have a SkinnedMeshRenderer. If blendshapeName is empty, auto-detects all common blendshapes.")]

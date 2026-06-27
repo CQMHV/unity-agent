@@ -34,7 +34,7 @@ namespace AjisaiFlow.UnityAgent.Editor.MA
         // ========== BoneProxy ==========
 
         public static Component AddBoneProxy(GameObject target, Transform bone,
-            BoneProxyAttachmentMode mode = BoneProxyAttachmentMode.AsChildAtRoot)
+            int mode = 0)
         {
             var comp = target.GetComponent<ModularAvatarBoneProxy>();
             if (comp == null)
@@ -42,7 +42,7 @@ namespace AjisaiFlow.UnityAgent.Editor.MA
             else
                 Undo.RecordObject(comp, "Update MA BoneProxy");
             comp.target = bone;
-            comp.attachmentMode = mode;
+            comp.attachmentMode = (BoneProxyAttachmentMode)mode;
             EditorUtility.SetDirty(comp);
             return comp;
         }
