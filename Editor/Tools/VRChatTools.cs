@@ -493,6 +493,146 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
             if (r != null) r.quaternionValue = right;
         }
 
+        [AgentTool("Configure VRChat lip sync (visemes). mode='auto' (default): strict-matches the 15 VisemeBlendShapes from the face mesh by standard names (vrc.v_aa / v_aa / Viseme_aa / aa) and reports any unmatched; if fewer than 3 match, falls back to JawFlapBone (humanoid Jaw bone) or JawFlapBlendShape. mode='viseme'/'jawbone'/'jawblendshape' force a specific style. meshPath optionally pins the face SkinnedMeshRenderer. jawOpenBlendshape names the open-mouth blendshape for jawblendshape mode. Strict matching only (no fuzzy substring) to avoid mis-mapping.")]
+        public static string ConfigureVRCViseme(string avatarRootName, string mode = "auto", string meshPath = "", string jawOpenBlendshape = "", float jawOpenDeg = 10f)
+        {
+            var descriptorType = FindVrcType(VrcDescriptorTypeName);
+            if (descriptorType == null) return "Error: VRChat SDK not found.";
+
+            var go = FindGO(avatarRootName);
+            if (go == null) return $"Error: GameObject '{avatarRootName}' not found.";
+
+            var descriptor = go.GetComponent(descriptorType);
+            if (descriptor == null) return $"Error: No VRCAvatarDescriptor found on '{avatarRootName}'.";
+
+            var so = new SerializedObject(descriptor);
+            var lipSyncProp = so.FindProperty("lipSync");
+            if (lipSyncProp == null) return "Error: lipSync property not found (incompatible VRC SDK?).";
+
+            string[] visemes = { "sil", "pp", "ff", "th", "dd", "kk", "ch", "ss", "nn", "rr", "aa", "e", "ih", "oh", "ou" };
+
+            SkinnedMeshRenderer[] smrs;
+            if (!string.IsNullOrEmpty(meshPath))
+            {
+                var mgo = FindGO(meshPath);
+                var smr = mgo != null ? mgo.GetComponent<SkinnedMeshRenderer>() : null;
+                if (smr == null) return $"Error: SkinnedMeshRenderer not found at '{meshPath}'.";
+                smrs = new[] { smr };
+            }
+            else smrs = go.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+
+            SkinnedMeshRenderer bestSmr = null;
+            string[] bestMap = null;
+            int bestMatched = -1;
+            foreach (var smr in smrs)
+            {
+                if (smr == null || smr.sharedMesh == null || smr.sharedMesh.blendShapeCount == 0) continue;
+                var mesh = smr.sharedMesh;
+                var names = new string[mesh.blendShapeCount];
+                for (int i = 0; i < names.Length; i++) names[i] = mesh.GetBlendShapeName(i);
+                var map = new string[visemes.Length];
+                int matched = 0;
+                for (int v = 0; v < visemes.Length; v++)
+                {
+                    string s = visemes[v];
+                    foreach (var n in names)
+                    {
+                        string low = n.ToLowerInvariant();
+                        if (low == "vrc.v_" + s || low == "v_" + s || low == "viseme_" + s || low == s)
+                        { map[v] = n; matched++; break; }
+                    }
+                }
+                if (matched > bestMatched) { bestMatched = matched; bestMap = map; bestSmr = smr; }
+            }
+
+            mode = (mode ?? "auto").ToLowerInvariant();
+            var sb = new StringBuilder();
+
+            bool wantViseme = mode == "viseme" || (mode == "auto" && bestMatched >= 3);
+            if (wantViseme)
+            {
+                if (bestSmr == null) return "Error: no SkinnedMeshRenderer with blendshapes found for visemes. Provide meshPath or use a jaw mode.";
+                if (!SetEnumByName(lipSyncProp, "VisemeBlendShape")) return "Error: could not set lipSync=VisemeBlendShape (incompatible VRC SDK enum?).";
+                var meshProp = so.FindProperty("VisemeSkinnedMesh");
+                if (meshProp != null) meshProp.objectReferenceValue = bestSmr;
+                var arr = so.FindProperty("VisemeBlendShapes");
+                if (arr != null)
+                {
+                    arr.arraySize = visemes.Length;
+                    for (int i = 0; i < visemes.Length; i++)
+                        arr.GetArrayElementAtIndex(i).stringValue = bestMap[i] ?? "";
+                }
+                Undo.RecordObject(descriptor, "Configure VRC Viseme");
+                so.ApplyModifiedProperties();
+                EditorUtility.SetDirty(descriptor);
+
+                var unmatched = new StringBuilder();
+                int unmatchedCount = 0;
+                for (int i = 0; i < visemes.Length; i++)
+                    if (string.IsNullOrEmpty(bestMap[i])) { if (unmatchedCount > 0) unmatched.Append(", "); unmatched.Append(visemes[i]); unmatchedCount++; }
+
+                sb.AppendLine($"Success: lipSync=VisemeBlendShape on '{avatarRootName}'. Mesh='{bestSmr.name}'. Matched {bestMatched}/15 visemes (strict: vrc.v_*/v_*/Viseme_*/exact).");
+                if (unmatchedCount > 0)
+                    sb.AppendLine($"  Unmatched ({unmatchedCount}): {unmatched} - the mesh uses non-standard names for these; set them manually in the LipSync inspector.");
+                return sb.ToString().TrimEnd();
+            }
+
+            var anim = go.GetComponent<Animator>();
+            Transform jaw = (anim != null && anim.isHuman) ? anim.GetBoneTransform(HumanBodyBones.Jaw) : null;
+            bool wantJawBone = mode == "jawbone" || (mode == "auto" && jaw != null);
+            if (wantJawBone)
+            {
+                if (jaw == null) return "Error: no humanoid Jaw bone mapped; cannot use JawFlapBone. Map the Jaw bone in the Rig, or use mode='jawblendshape'/'viseme'.";
+                if (!SetEnumByName(lipSyncProp, "JawFlapBone")) return "Error: could not set lipSync=JawFlapBone.";
+                var jawProp = so.FindProperty("lipSyncJawBone");
+                if (jawProp != null) jawProp.objectReferenceValue = jaw;
+                var closed = so.FindProperty("lipSyncJawClosed");
+                var open = so.FindProperty("lipSyncJawOpen");
+                if (closed != null) closed.quaternionValue = jaw.localRotation;
+                if (open != null) open.quaternionValue = jaw.localRotation * Quaternion.Euler(jawOpenDeg, 0f, 0f);
+                Undo.RecordObject(descriptor, "Configure VRC Viseme");
+                so.ApplyModifiedProperties();
+                EditorUtility.SetDirty(descriptor);
+                return $"Success: lipSync=JawFlapBone on '{avatarRootName}'. Jaw bone='{jaw.name}', open rotation ~{jawOpenDeg}deg around X. Verify/tune the open rotation in the inspector (jaw axis varies per avatar).";
+            }
+
+            if (mode == "jawblendshape" || mode == "auto")
+            {
+                if (bestSmr == null) return "Error: no face mesh with blendshapes and no Jaw bone found; cannot configure lip sync. Provide meshPath or map a Jaw bone.";
+                if (!SetEnumByName(lipSyncProp, "JawFlapBlendShape")) return "Error: could not set lipSync=JawFlapBlendShape.";
+                var meshProp = so.FindProperty("VisemeSkinnedMesh");
+                if (meshProp != null) meshProp.objectReferenceValue = bestSmr;
+                string applied = "";
+                if (!string.IsNullOrEmpty(jawOpenBlendshape))
+                {
+                    bool exists = false;
+                    var m = bestSmr.sharedMesh;
+                    for (int i = 0; i < m.blendShapeCount; i++) if (m.GetBlendShapeName(i) == jawOpenBlendshape) { exists = true; break; }
+                    if (!exists) return $"Error: blendshape '{jawOpenBlendshape}' not found on mesh '{bestSmr.name}'.";
+                    var nameProp = so.FindProperty("MouthOpenBlendShapeName");
+                    if (nameProp != null) nameProp.stringValue = jawOpenBlendshape;
+                    applied = $", open blendshape='{jawOpenBlendshape}'";
+                }
+                Undo.RecordObject(descriptor, "Configure VRC Viseme");
+                so.ApplyModifiedProperties();
+                EditorUtility.SetDirty(descriptor);
+                sb.AppendLine($"Success: lipSync=JawFlapBlendShape on '{avatarRootName}'. Mesh='{bestSmr.name}'{applied}.");
+                if (string.IsNullOrEmpty(jawOpenBlendshape))
+                    sb.AppendLine("  Specify jawOpenBlendshape (the open-mouth blendshape name on this mesh) to finish JawFlapBlendShape setup.");
+                return sb.ToString().TrimEnd();
+            }
+
+            return $"Error: unknown mode '{mode}'. Valid: auto, viseme, jawbone, jawblendshape.";
+        }
+
+        private static bool SetEnumByName(SerializedProperty prop, string name)
+        {
+            var names = prop.enumNames;
+            for (int i = 0; i < names.Length; i++)
+                if (names[i] == name) { prop.enumValueIndex = i; return true; }
+            return false;
+        }
+
         // VRCPhysBone List/Inspect/Configure/Template tools moved to PhysBoneTools.cs.
 
         [AgentTool("List expression parameters from the VRCExpressionParameters asset assigned to the avatar. RAW VRC SDK ONLY — does NOT include parameters added by NDMF/Modular Avatar/VRCFury at build time. Related: ListNDMFParameters returns the full post-build view (recommended companion call when NDMF is installed).")]
