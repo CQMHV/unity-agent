@@ -32,7 +32,7 @@ namespace AjisaiFlow.UnityAgent.Editor
         private bool _useThinking;
         private int _thinkingBudget = 8192;
         private int _effortLevel = 2;
-        private int _imageProviderType; // 0=Gemini, 1=OpenAI
+        private int _imageProviderType; // 0=Gemini, 1=OpenAI, 2=ComfyUI
         private string _imageModelName = "gemini-2.5-flash-image";
         private bool _useCustomImageModel;
         private string _imageApiKey = "";
@@ -46,6 +46,17 @@ namespace AjisaiFlow.UnityAgent.Editor
         private string _openaiImageModelName = "gpt-image-1";
         private string _openaiImageBaseUrl = "https://api.openai.com";
         private bool _useCustomOpenAIImageModel;
+        // ComfyUI 画像設定
+        private string _comfyBaseUrl = "http://127.0.0.1:8188";
+        private string _comfyWorkflowJson = "";
+        private string _comfyCkpt = "v1-5-pruned-emaonly.safetensors";
+        private string _comfyNegative = "text, watermark, lowres, bad anatomy, blurry";
+        private string _comfyDenoise = "0.75";
+        private string _comfySteps = "20";
+        private string _comfyCfg = "8";
+        private string _comfySampler = "euler";
+        private string _comfyScheduler = "normal";
+        private string _comfySeed = "-1";
         private string _meshyApiKey = "";
         private bool _isFetchingGeminiModels;
 
@@ -599,6 +610,8 @@ namespace AjisaiFlow.UnityAgent.Editor
                 BuildGeminiImageSubsection(parent);
             else if (_imageProviderType == 1) // OpenAI
                 BuildOpenAIImageSubsection(parent);
+            else if (_imageProviderType == 2) // ComfyUI
+                BuildComfyUIImageSubsection(parent);
         }
 
         private void BuildGeminiImageSubsection(VisualElement parent)
@@ -676,6 +689,21 @@ namespace AjisaiFlow.UnityAgent.Editor
 
             BuildImageModelSelector(parent, M("画像モデル"), ref _openaiImageModelName, ref _useCustomOpenAIImageModel,
                 ProviderRegistry.OpenAIImageModelPresets);
+        }
+
+        private void BuildComfyUIImageSubsection(VisualElement parent)
+        {
+            AddTextField(parent, "Base URL", _comfyBaseUrl, v => { _comfyBaseUrl = v; SaveSettings(); });
+            AddTextField(parent, M("チェックポイント (ckpt_name)"), _comfyCkpt, v => { _comfyCkpt = v; SaveSettings(); });
+            AddTextField(parent, M("ネガティブプロンプト"), _comfyNegative, v => { _comfyNegative = v; SaveSettings(); });
+            AddTextField(parent, M("Denoise (0.0〜1.0)"), _comfyDenoise, v => { _comfyDenoise = v; SaveSettings(); });
+            AddTextField(parent, "Steps", _comfySteps, v => { _comfySteps = v; SaveSettings(); });
+            AddTextField(parent, "CFG", _comfyCfg, v => { _comfyCfg = v; SaveSettings(); });
+            AddTextField(parent, "Sampler", _comfySampler, v => { _comfySampler = v; SaveSettings(); });
+            AddTextField(parent, "Scheduler", _comfyScheduler, v => { _comfyScheduler = v; SaveSettings(); });
+            AddTextField(parent, M("シード (-1=毎回ランダム)"), _comfySeed, v => { _comfySeed = v; SaveSettings(); });
+            AddTextField(parent, M("カスタム workflow (任意・API形式JSON。{{IMAGE}}{{POSITIVE}}{{SEED}} 等を文字列値の中に置く)"),
+                _comfyWorkflowJson, v => { _comfyWorkflowJson = v; SaveSettings(); });
         }
 
         private void BuildImageModelSelector(VisualElement parent, string label,
@@ -2669,6 +2697,17 @@ namespace AjisaiFlow.UnityAgent.Editor
             _openaiImageModelName = SettingsStore.GetString("UnityAgent_OpenAI_ImageModelName", "gpt-image-1");
             _openaiImageBaseUrl = SettingsStore.GetString("UnityAgent_OpenAI_ImageBaseUrl", "https://api.openai.com");
             _useCustomOpenAIImageModel = Array.IndexOf(ProviderRegistry.OpenAIImageModelPresets, _openaiImageModelName) < 0;
+            // ComfyUI 画像設定
+            _comfyBaseUrl = SettingsStore.GetString("UnityAgent_ComfyUI_BaseUrl", "http://127.0.0.1:8188");
+            _comfyWorkflowJson = SettingsStore.GetString("UnityAgent_ComfyUI_WorkflowJson", "");
+            _comfyCkpt = SettingsStore.GetString("UnityAgent_ComfyUI_Ckpt", "v1-5-pruned-emaonly.safetensors");
+            _comfyNegative = SettingsStore.GetString("UnityAgent_ComfyUI_Negative", "text, watermark, lowres, bad anatomy, blurry");
+            _comfyDenoise = SettingsStore.GetString("UnityAgent_ComfyUI_Denoise", "0.75");
+            _comfySteps = SettingsStore.GetString("UnityAgent_ComfyUI_Steps", "20");
+            _comfyCfg = SettingsStore.GetString("UnityAgent_ComfyUI_Cfg", "8");
+            _comfySampler = SettingsStore.GetString("UnityAgent_ComfyUI_Sampler", "euler");
+            _comfyScheduler = SettingsStore.GetString("UnityAgent_ComfyUI_Scheduler", "normal");
+            _comfySeed = SettingsStore.GetString("UnityAgent_ComfyUI_Seed", "-1");
             _meshyApiKey = SettingsStore.GetString("UnityAgent_MeshyApiKey", "");
 
             _themeMode = AgentSettings.ThemeMode;
@@ -2717,6 +2756,17 @@ namespace AjisaiFlow.UnityAgent.Editor
             SettingsStore.SetString("UnityAgent_OpenAI_ImageApiKey", _openaiImageApiKey);
             SettingsStore.SetString("UnityAgent_OpenAI_ImageModelName", _openaiImageModelName);
             SettingsStore.SetString("UnityAgent_OpenAI_ImageBaseUrl", _openaiImageBaseUrl);
+            // ComfyUI 画像設定
+            SettingsStore.SetString("UnityAgent_ComfyUI_BaseUrl", _comfyBaseUrl);
+            SettingsStore.SetString("UnityAgent_ComfyUI_WorkflowJson", _comfyWorkflowJson);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Ckpt", _comfyCkpt);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Negative", _comfyNegative);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Denoise", _comfyDenoise);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Steps", _comfySteps);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Cfg", _comfyCfg);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Sampler", _comfySampler);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Scheduler", _comfyScheduler);
+            SettingsStore.SetString("UnityAgent_ComfyUI_Seed", _comfySeed);
             SettingsStore.SetString("UnityAgent_MeshyApiKey", _meshyApiKey);
 
             // Notify the main window to reload settings and reinitialize agent

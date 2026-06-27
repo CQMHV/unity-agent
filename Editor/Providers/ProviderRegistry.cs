@@ -49,6 +49,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
     {
         Gemini = 0,
         OpenAI = 1,
+        ComfyUI = 2,
     }
 
     /// <summary>
@@ -146,7 +147,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
             "gemini-3.1-flash-image",
         };
 
-        public static readonly string[] ImageProviderDisplayNames = { "Gemini", "OpenAI" };
+        public static readonly string[] ImageProviderDisplayNames = { "Gemini", "OpenAI", "ComfyUI" };
 
         public static readonly string[] OpenAIImageModelPresets = { "gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini" };
 
@@ -714,6 +715,23 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
                     string oaiBase = SettingsStore.GetString("UnityAgent_OpenAI_ImageBaseUrl", "https://api.openai.com");
                     return new OpenAIImageProvider(oaiKey, oaiModel, oaiBase);
 
+                case ImageProviderType.ComfyUI:
+                    string cfBase = SettingsStore.GetString("UnityAgent_ComfyUI_BaseUrl", "http://127.0.0.1:8188");
+                    string cfWorkflow = SettingsStore.GetString("UnityAgent_ComfyUI_WorkflowJson", "");
+                    string cfCkpt = SettingsStore.GetString("UnityAgent_ComfyUI_Ckpt", "v1-5-pruned-emaonly.safetensors");
+                    string cfNeg = SettingsStore.GetString("UnityAgent_ComfyUI_Negative", "text, watermark, lowres, bad anatomy, blurry");
+                    float cfDenoise = ParseFloat(SettingsStore.GetString("UnityAgent_ComfyUI_Denoise", "0.75"), 0.75f);
+                    int cfSteps = ParseInt(SettingsStore.GetString("UnityAgent_ComfyUI_Steps", "20"), 20);
+                    float cfCfg = ParseFloat(SettingsStore.GetString("UnityAgent_ComfyUI_Cfg", "8"), 8f);
+                    string cfSampler = SettingsStore.GetString("UnityAgent_ComfyUI_Sampler", "euler");
+                    string cfScheduler = SettingsStore.GetString("UnityAgent_ComfyUI_Scheduler", "normal");
+                    // ComfyUI seed は 0..2^64-1。long に収まらない再現シードを毎回ランダムに化けさせないため ulong でパース。
+                    string cfSeedStr = (SettingsStore.GetString("UnityAgent_ComfyUI_Seed", "-1") ?? "").Trim();
+                    ulong cfSeedFixed = 0;
+                    bool cfSeedRandom = cfSeedStr.Length == 0 || cfSeedStr == "-1"
+                        || !ulong.TryParse(cfSeedStr, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out cfSeedFixed);
+                    return new ComfyUIImageProvider(cfBase, cfWorkflow, cfCkpt, cfNeg, cfDenoise, cfSteps, cfCfg, cfSampler, cfScheduler, cfSeedRandom, cfSeedFixed);
+
                 default: // Gemini
                     string apiKey = SettingsStore.GetString("UnityAgent_ImageApiKey", "");
                     int connMode = SettingsStore.GetInt("UnityAgent_ImageConnectionMode", 0);
@@ -739,6 +757,19 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
         }
 
         // ─── Helpers ───
+
+        private static float ParseFloat(string s, float def)
+        {
+            if (string.IsNullOrEmpty(s)) return def;
+            s = s.Trim();
+            if (float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v)) return v;
+            // ロケール由来のカンマ小数 (例 "7,5") を救済
+            if (float.TryParse(s.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v2)) return v2;
+            return def;
+        }
+
+        private static int ParseInt(string s, int def)
+            => int.TryParse(s, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : def;
 
         private static string GetDefaultCliPath(LLMProviderType type)
         {
