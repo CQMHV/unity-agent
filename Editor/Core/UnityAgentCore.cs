@@ -1547,17 +1547,8 @@ namespace AjisaiFlow.UnityAgent.Editor
 
         private string GetSystemPrompt()
         {
+            // sb accumulates ONLY the dynamic tools/MCP section, injected into the template as {{TOOLS}}.
             var sb = new StringBuilder();
-
-            // Section 1: Identity & Syntax
-            sb.AppendLine("You are an AI Agent for Unity Editor. You can manipulate the project using tools.");
-            sb.AppendLine("Use [MethodName(arg1, arg2)] to call tools. Use SearchTools(\"keyword\") to find tools and see parameters.");
-            sb.AppendLine("Use AskUser(question, option1, option2, ...) to present choices. option1 and option2 are REQUIRED (minimum 2 options). The user can also ignore the options and type a free-text response in the input field. Use importance='warning' for side effects, 'critical' for destructive operations.");
-            sb.AppendLine("\n<syntax>");
-            sb.AppendLine("Strings: \"text\" or 'text' (escapes \\\" \\' \\\\ \\n \\t). For multi-line content / code / JSON, prefer triple-quoted raw strings \"\"\"verbatim text\"\"\" (no escaping; a triple-quoted string cannot itself contain \"\"\"). Example: [WriteFile(\"A.cs\", \"\"\"line1");
-            sb.AppendLine("line2\"\"\")].");
-            sb.AppendLine("Arguments: a parameter shown without '= default' is REQUIRED — always provide it. Never pass '' for a required string. Never guess a required value — inspect or AskUser. Specialized tools: run SearchTools(\"keyword\") to read exact signatures (REQUIRED markers) before calling.");
-            sb.AppendLine("</syntax>");
 
             // Section 2: Available Tools — Core (signatures) + Specialized (category summary)
             var toolMethods = ToolRegistry.GetEnabledMethods();
@@ -1699,47 +1690,54 @@ namespace AjisaiFlow.UnityAgent.Editor
                 }
             }
 
-            // Section 3: Core Rules
-            // Dynamic language from UILanguage setting
+            // Dynamic language label for {{LANG}}.
             string lang = AgentSettings.UILanguage;
             var langEntry = AgentSettings.SupportedLanguages
                 .FirstOrDefault(l => l.code == lang);
             string langLabel = langEntry.label ?? lang;
 
-            sb.AppendLine("\n<rules>");
-            sb.AppendLine($"- Reply in {langLabel} ({lang}). Write a one-line reason, then end the turn with EXACTLY ONE tool call on the last line; stop immediately after it (no trailing text, no second tool, never output \"Tool Output:\" yourself). Tool calls go on their own line with no inline comments.");
-            sb.AppendLine("- Never predict, assume, or fabricate a tool's result, or invent GameObject/material paths or property values. Plan the next step ONLY from the real result the system returns.");
-            sb.AppendLine("- Do ONLY what the user explicitly asked; then summarize and STOP. Never chain extra steps (placing an avatar is NOT outfit setup; outfit setup is NOT toggles/menus/PhysBones). One task at a time.");
-            sb.AppendLine("- Inspect, never ask, for structure / components / properties / names / errors: use ListRootObjects, GetHierarchyTree, InspectGameObject, DeepInspectComponent yourself. Ask the user ONLY for intent or aesthetic preference.");
-            sb.AppendLine("- Read-only intent (確認して/見せて/教えて/調べて/チェックして): inspect and report only; change nothing unless the user then asks for a change.");
-            sb.AppendLine("- Ambiguous target or vague/subjective request (色を変えて with no object, かわいくして, improve it, ○○みたいにして): AskUser with 2-4 concrete options; never guess the target or aesthetics. Always confirm when multiple avatars exist.");
-            sb.AppendLine("- Undo (元に戻して/取り消して): you cannot undo; tell the user to use Unity Edit > Undo (Ctrl+Z). Do not reverse changes manually.");
-            sb.AppendLine("- When [Hierarchy Selection] or [Project Selection] is shown, pass its full path as gameObjectName.");
-            sb.AppendLine("- On failure, read the error (it lists REQUIRED/optional params), fix ALL required args, then retry. After 2 failures, change approach or AskUser. Never repeat a call that already succeeded. Some tools need confirmation (handled automatically).");
-            sb.AppendLine("</rules>");
+            // Dynamic skill summaries for {{SKILLS}}.
+            string skillSummaries = Tools.SkillTools.GetSkillSummariesForPrompt() ?? "";
 
-            sb.AppendLine("\n<workflow>");
-            sb.AppendLine("- Anything beyond Core Tools (color, toggle, outfit, PhysBone, expression, animation, material, etc.): run SearchTools(\"keyword\") for the exact tool and params AND ReadSkill(\"skill\") for the procedure BEFORE acting (skip ReadSkill only if already read this conversation). Never guess specialized tool names or params.");
-            sb.AppendLine("- Before changing any mesh (color/texture/material): ScanAvatarMeshes(avatarRoot) first — object names are unreliable (a 'Body' object may be the face). After any visual change: CaptureSceneView() to verify, then AskUser(\"結果はいかがですか？\", \"OK\", \"やり直し\", \"微調整したい\").");
-            sb.AppendLine("- Color/texture: ReadSkill(\"texture-editing\"); use ApplyGradientEx (color) or AdjustHSV (brightness/saturation); never SetMaterialProperty on lilToon. Partial areas: EnableIslandSelectionMode then GetSelectedIslands then apply by islandIndices. Custom patterns: GenerateTextureWithAI.");
-            sb.AppendLine("- Hide (非表示/消して) = SetActive(name, false) (editor-only). In-game toggle (トグル/切り替え) = SearchTools(\"toggle\"); use SetupObjectToggle ONLY for an explicit VRChat gimmick.");
-            sb.AppendLine("- Outfit: ReadSkill(\"outfit-setup\"). Accessory: ReadSkill(\"accessory-setup\"). Never guess transforms.");
-            sb.AppendLine("- Expressions / gestures / face menu: ReadSkill(\"face-emo\") and use FaceEmo tools (CreateAndRegisterExpression / CreateExpressionFromData); find BlendShapes via SearchExpressionShapes, never guess names. FaceEmo is only for facial expressions.");
-            sb.AppendLine("- PhysBone: ReadSkill(\"physbone-setup\"); InspectVRCPhysBone then AskUser with current values then apply. lilToon effects: ReadSkill(\"liltoon-effects\"). Troubleshooting: ReadSkill(\"troubleshooting\") (ValidateAvatar + GetAvatarPerformanceStats first). Batch: ReadSkill(\"batch-operations\").");
-            sb.AppendLine("</workflow>");
-
-            // Section 6: Skill References
-            sb.AppendLine("\n<skills>");
-            sb.AppendLine("Skills are step-by-step guides for complex operations. Use SearchSkills(keyword) to find or ReadSkill(name) to read full instructions.");
-
-            // Section 7: Dynamic Skill Summaries
-            string skillSummaries = Tools.SkillTools.GetSkillSummariesForPrompt();
-            if (!string.IsNullOrEmpty(skillSummaries))
-                sb.Append(skillSummaries);
-            sb.AppendLine("</skills>");
-
-            return sb.ToString();
+            // Load the static prompt text from Editor/Core/system-prompt.md (readable plain text, no C# escaping)
+            // and inject the dynamic sections via tokens.
+            return LoadSystemPromptTemplate()
+                .Replace("{{TOOLS}}", sb.ToString().TrimEnd())
+                .Replace("{{LANG}}", $"{langLabel} ({lang})")
+                .Replace("{{SKILLS}}", skillSummaries.TrimEnd());
         }
+
+        /// <summary>
+        /// 静的システムプロンプト本文 (Editor/Core/system-prompt.md) を読み込む。
+        /// ファイルが見つからない場合 (部分インストール等) は最小限のフォールバックを返し、
+        /// エージェントが常に基本動作ルールを持つようにする。
+        /// </summary>
+        private static string LoadSystemPromptTemplate()
+        {
+            try
+            {
+                string path = System.IO.Path.Combine(PackagePaths.PackageRoot, "Editor", "Core", "system-prompt.md");
+                if (System.IO.File.Exists(path))
+                    return System.IO.File.ReadAllText(path);
+                Debug.LogWarning($"[UnityAgent] system-prompt.md not found at {path}; using fallback prompt.");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[UnityAgent] Failed to load system-prompt.md: {e.Message}; using fallback prompt.");
+            }
+            return FallbackSystemPrompt;
+        }
+
+        private const string FallbackSystemPrompt =
+            "You are an AI Agent for Unity Editor. Operate it by calling tools with [MethodName(args)].\n\n" +
+            "{{TOOLS}}\n\n" +
+            "<rules>\n" +
+            "- Reply in {{LANG}}. Write a one-line reason, then end the turn with EXACTLY ONE tool call on the last line; stop immediately after it (no trailing text, no second tool).\n" +
+            "- Never fabricate a tool's result, paths, or values; plan only from the real result the system returns.\n" +
+            "- Do ONLY what the user asked, then summarize and STOP. Inspect the scene yourself (ListRootObjects, InspectGameObject) instead of asking about structure / names / errors.\n" +
+            "- For anything beyond Core Tools, run SearchTools(\"keyword\") and ReadSkill(\"skill\") before acting. Before mesh changes call ScanAvatarMeshes; after visual changes call CaptureSceneView and confirm with AskUser.\n" +
+            "</rules>\n\n" +
+            "<skills>\nUse SearchSkills(keyword) / ReadSkill(name) for procedures.\n{{SKILLS}}\n</skills>\n";
 
         private static string FormatTokenCount(int tokens)
         {
