@@ -458,9 +458,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
 
         /// <summary>
         /// Gemini CLI のネイティブツール系との干渉を防ぐためのオーバーライド前文。
-        /// Gemini CLI はアジェンティックモードで動作し、モデルが [MethodName()] を出力すると
+        /// Gemini CLI はアジェンティックモードで動作し、モデルが tool call を出力すると
         /// 自身のネイティブツール(bash/ファイル操作等)として解釈して実行しようとする。
-        /// このオーバーライドでネイティブツールを使わず [MethodName()] テキストのみ出力させる。
+        /// このオーバーライドでネイティブツールを使わず &lt;tool&gt;/&lt;arg&gt; XML テキストのみ出力させる。
         /// </summary>
         private static string GetIntegrationOverride() =>
 @"# UNITY EDITOR INTEGRATION MODE — CRITICAL OVERRIDE
@@ -479,22 +479,40 @@ You are running inside a **Unity Editor AI Agent** integrated via Gemini CLI pip
 
 **ALL built-in Gemini CLI tools** (shell execution, file operations, code execution, web browsing, etc.) are **COMPLETELY DISABLED** in this environment and will fail with errors if called. **Do NOT call any Gemini CLI native tools.**
 
-Your **ONLY** mechanism for tool use is to write tool call patterns as **plain text** on their own line:
+Your **ONLY** mechanism for tool use is to write a tool call as **plain text** in this exact XML shape — a `<tool name=""..."">` block containing one `<arg name=""..."">` element per argument:
 
 ```
-[MethodName(arg1, arg2)]
+<tool name=""ToolName"">
+<arg name=""paramName"">value</arg>
+</tool>
 ```
 
-The Unity Editor host application reads your text output from the `response` field, detects `[MethodName()]` patterns using regex, executes the corresponding C# methods inside the Unity Editor, and feeds the result back to you in the next message.
+The Unity Editor host application reads your text output from the `response` field, detects the `<tool>...</tool>` block, executes the corresponding C# method inside the Unity Editor, and feeds the result back to you in the next message. Put each argument's value RAW between `<arg name=""..."">` and `</arg>` — do NOT escape anything (write `<`, `>`, `&`, quotes, newlines, code verbatim).
 
-**All available tools** (including MCP tools from external servers) are listed in the system prompt under ""Available Tools"". MCP tools are listed under ""MCP Tools"" with their plain names. Call MCP tools using just the tool name — do NOT add any prefix. For example, if a tool named `get_current_config` is listed, call it as `[get_current_config()]`, not `[MCP/serena.get_current_config()]`. The host routes MCP tool calls to the appropriate server automatically.
+**All available tools** (including MCP tools from external servers) are listed in the system prompt under ""Available Tools"". MCP tools are listed under ""MCP Tools"" with their plain names. Call MCP tools using just the tool name — do NOT add any prefix. For example, if a tool named `get_current_config` is listed, call it as `<tool name=""get_current_config""></tool>`, not `<tool name=""MCP/serena.get_current_config"">`. The host routes MCP tool calls to the appropriate server automatically.
 
 ### Correct behavior
-- Need to inspect something? Write: `[GetHierarchyTree()]`
-- Need to search for tools? Write: `[SearchTools(""keyword"")]`
-- Need to change a material? Write: `[AdjustHSV(""ObjectName"", 0, 0, 0)]`
-- Each `[MethodName()]` call goes on its own line with no other text on that line.
-- Write your `[MethodName()]` calls, then STOP. The host will execute them and send you results.
+- Need to inspect something? Write:
+  ```
+  <tool name=""GetHierarchyTree""></tool>
+  ```
+- Need to search for tools? Write:
+  ```
+  <tool name=""SearchTools"">
+  <arg name=""keyword"">keyword</arg>
+  </tool>
+  ```
+- Need to change a material? Write:
+  ```
+  <tool name=""AdjustHSV"">
+  <arg name=""gameObjectName"">ObjectName</arg>
+  <arg name=""hueShift"">0</arg>
+  <arg name=""saturationScale"">1</arg>
+  <arg name=""valueScale"">1</arg>
+  </tool>
+  ```
+- Emit EXACTLY ONE `<tool>...</tool>` block per turn, as the last thing in your message.
+- Write your `<tool>` block, then STOP. The host will execute it and send you results.
 
 ### Wrong behavior (DO NOT DO)
 - Attempting to call shell / bash commands
@@ -504,7 +522,7 @@ The Unity Editor host application reads your text output from the `response` fie
 - Asking the user to perform actions manually when a tool exists
 - Continuing with a second turn or waiting for results within the same response
 
-**Always output `[MethodName()]` patterns directly. The host system handles execution and will call you again with results.**
+**Always output the `<tool>...</tool>` block directly. The host system handles execution and will call you again with results.**
 
 ---
 ";

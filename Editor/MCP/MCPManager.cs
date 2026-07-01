@@ -359,6 +359,34 @@ namespace AjisaiFlow.UnityAgent.Editor.MCP
             return JNode.Obj(pairs.ToArray());
         }
 
+        /// <summary>
+        /// Build JSON arguments from XML-style named args (arg name → raw value).
+        ///
+        /// Each entry maps to a tool parameter by name (case-insensitive) and is converted via the
+        /// tool's declared JSON-schema type. Args whose name matches no parameter are passed through
+        /// verbatim as strings (lenient — the server may accept extra fields, and skipping a user-supplied
+        /// value silently would be worse). Values are taken as-is (already decoded by XmlToolCallParser).
+        /// </summary>
+        public static JNode BuildArguments(MCPToolDef tool, Dictionary<string, string> namedArgs)
+        {
+            var pairs = new List<(string, JNode)>();
+            if (namedArgs == null)
+                return JNode.Obj(pairs.ToArray());
+
+            var paramList = tool.Params ?? new List<MCPToolParam>();
+            foreach (var kv in namedArgs)
+            {
+                var matchParam = paramList.FirstOrDefault(p =>
+                    string.Equals(p.Name, kv.Key, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(matchParam.Name))
+                    pairs.Add((matchParam.Name, ConvertArg(kv.Value, matchParam.Type)));
+                else
+                    pairs.Add((kv.Key, ConvertArg(kv.Value, null))); // unknown param: pass through as auto-typed
+            }
+
+            return JNode.Obj(pairs.ToArray());
+        }
+
         static JNode ConvertArg(string value, string type)
         {
             switch (type)

@@ -85,6 +85,35 @@ namespace AjisaiFlow.UnityAgent.Editor
         /// HandleResponse で履歴をここまで切り詰め、ハルシネーション部分を除去するために使用。</summary>
         private int _firstToolEndIndex = -1;
 
+        /// <summary>
+        /// ブラケット構文 [Method(args)] と XML 構文 &lt;tool name="..."&gt;&lt;arg name="..."&gt;...&lt;/arg&gt;&lt;/tool&gt;
+        /// の両方を中立的に表すツール呼び出しマッチ。ExecuteToolsAsync の単一ツール強制・バッチ確認・
+        /// 引数バインドはこの型に対して動作し、どちらの構文でも同一のフローに合流する。
+        /// </summary>
+        private sealed class ToolCallMatch
+        {
+            /// <summary>ツール名 (メソッド名 / MCP ツール名)。</summary>
+            public string Name;
+            /// <summary>ソーステキスト内の呼び出し開始インデックス。</summary>
+            public int Index;
+            /// <summary>呼び出しの長さ (単一ツール強制・履歴切り詰めに使用)。</summary>
+            public int Length;
+            /// <summary>ブラケット構文の位置/名前混在引数 (SplitArguments の出力)。XML の場合は null。</summary>
+            public string[] PositionalArgs;
+            /// <summary>XML 構文の名前付き引数 (arg 名 → 値, OrdinalIgnoreCase)。ブラケットの場合は null。</summary>
+            public Dictionary<string, string> NamedArgs;
+
+            /// <summary>確認ダイアログ等の表示用に引数を 1 行へ整形する。</summary>
+            public string ParamsDisplay()
+            {
+                if (NamedArgs != null)
+                    return string.Join(", ", NamedArgs.Select(kv => $"{kv.Key}={kv.Value}"));
+                if (PositionalArgs != null)
+                    return string.Join(", ", PositionalArgs.Select(a => a.Trim()));
+                return "";
+            }
+        }
+
         public void Cancel()
         {
             if (_isProcessing)
@@ -715,110 +744,149 @@ namespace AjisaiFlow.UnityAgent.Editor
 
         private IEnumerator ExecuteToolsAsync(string text, Action<string> onStatus, List<string> results)
         {
-            // Try bracketed format first: [MethodName(arg1, arg2)]
-            // The argument-list grammar (inside the inner non-capturing group) accepts in priority order:
-            //   1. """...""" — triple-quoted raw multi-line string (no escape processing)
-            //      Pattern: """(?:[^"]|"(?!""))*""" — matches anything not containing 3 consecutive quotes
-            //   2. [^'"()]* — bare characters
-            //   3. '...' — single-quoted string
-            //   4. "..." — double-quoted string
-            // Triple-quoted MUST come first so the matcher does not consume it as a sequence of empty "" tokens.
-            const string ArgsPattern = @"(?:""""""(?:[^""]|""(?!""""))*""""""|[^'""()]*|'[^']*'|""[^""]*"")*";
+            // Neutral list of tool calls — populated from EITHER the XML syntax OR the bracket syntax.
+            // Both paths converge on the same single-tool/binding/confirm/invoke flow below.
+            var matchList = new List<ToolCallMatch>();
 
-            var matches = System.Text.RegularExpressions.Regex.Matches(
-                text, $@"\[(\w+)\(({ArgsPattern})\)\]",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
-
-            if (matches.Count == 0)
+            // --- XML-FIRST detection: <tool name="..."><arg name="...">value</arg></tool> ---
+            // The XML syntax is the primary, prompt-taught format. If at least one <tool> call is
+            // present we use ONLY the XML calls and skip the bracket regex entirely.
+            var xmlCalls = XmlToolCallParser.Parse(text);
+            if (xmlCalls.Count > 0)
             {
-                // Fallback: [MCP/server.MethodName(args)] or [prefix.MethodName(args)] format
-                // Captures just the final method name after the last dot or slash
-                matches = System.Text.RegularExpressions.Regex.Matches(
-                    text, $@"\[[\w/]+[./](\w+)\(({ArgsPattern})\)\]",
-                    System.Text.RegularExpressions.RegexOptions.Singleline);
-            }
-
-            if (matches.Count == 0)
-            {
-                // Fallback: [Category: MethodName(args)] format (some models add a label prefix)
-                matches = System.Text.RegularExpressions.Regex.Matches(
-                    text, $@"\[\w+:\s*(\w+)\(({ArgsPattern})\)\]",
-                    System.Text.RegularExpressions.RegexOptions.Singleline);
-            }
-
-            if (matches.Count == 0)
-            {
-                // Fallback: match line-only MethodName(args) without brackets
-                // (some models omit the square brackets)
-                matches = System.Text.RegularExpressions.Regex.Matches(text, @"^(\w+)\((.*)\)\s*$",
-                    System.Text.RegularExpressions.RegexOptions.Multiline);
-            }
-
-            if (matches.Count == 0)
-            {
-                // Fallback: backtick-wrapped tool calls — `MethodName(args)` or ```MethodName(args)```
-                // (some models wrap tool calls in markdown code formatting)
-                matches = System.Text.RegularExpressions.Regex.Matches(text, @"^`+(\w+)\(((?:[^'""()]*|'[^']*'|""[^""]*"")*)\)`+\s*$",
-                    System.Text.RegularExpressions.RegexOptions.Multiline);
-            }
-
-            if (matches.Count == 0)
-            {
-                // Fallback: MethodName(args) at start of line followed by non-tool text
-                // Handles cases like: FindFaceEmo()を呼び出して... or ListBlendShapesEx("Body")を確認
-                // Uses balanced parentheses matching for simple args
-                var lenientMatches = System.Text.RegularExpressions.Regex.Matches(text,
-                    @"^(\w+)\(([^)]*)\)",
-                    System.Text.RegularExpressions.RegexOptions.Multiline);
-                // Only accept if at least one match is a known tool name
-                var toolNames = new HashSet<string>(
-                    GetToolMethods().Select(m => m.Name),
-                    StringComparer.OrdinalIgnoreCase);
-                foreach (var mn in MCPManager.GetToolNames()) toolNames.Add(mn);
-                foreach (var mn in BuiltinMCPToolNames) toolNames.Add(mn);
-                var validMatches = new List<System.Text.RegularExpressions.Match>();
-                foreach (System.Text.RegularExpressions.Match lm in lenientMatches)
+                foreach (var c in xmlCalls)
                 {
-                    if (lm.Success && toolNames.Contains(lm.Groups[1].Value))
-                        validMatches.Add(lm);
-                }
-                if (validMatches.Count > 0)
-                {
-                    // Re-run with the same regex — matches already validated above
-                    matches = lenientMatches;
-                }
-            }
-
-            // --- Supplemental: detect tool calls embedded in running text ---
-            // Earlier stages may miss unbracketed calls mid-sentence
-            // (e.g. "次に AnalyzeGimmickStructure("TK") で確認")
-            // This pass always runs and adds non-overlapping, tool-name-validated matches.
-            var matchList = new List<System.Text.RegularExpressions.Match>();
-            foreach (System.Text.RegularExpressions.Match m in matches)
-                if (m.Success) matchList.Add(m);
-
-            {
-                var inlineToolNames = new HashSet<string>(
-                    GetToolMethods().Select(m => m.Name),
-                    StringComparer.OrdinalIgnoreCase);
-                foreach (var mn in MCPManager.GetToolNames()) inlineToolNames.Add(mn);
-                foreach (var mn in BuiltinMCPToolNames) inlineToolNames.Add(mn);
-                var inlineMatches = System.Text.RegularExpressions.Regex.Matches(text,
-                    @"(?<!\.)(\w+)\(((?:[^'""()]*|'[^']*'|""[^""]*"")*)\)");
-                foreach (System.Text.RegularExpressions.Match im in inlineMatches)
-                {
-                    if (!im.Success || !inlineToolNames.Contains(im.Groups[1].Value))
-                        continue;
-                    // Skip if overlapping with an existing match
-                    bool overlaps = false;
-                    foreach (var existing in matchList)
+                    matchList.Add(new ToolCallMatch
                     {
-                        if (im.Index < existing.Index + existing.Length
-                            && im.Index + im.Length > existing.Index)
-                        { overlaps = true; break; }
+                        Name = c.Name,
+                        Index = c.Index,
+                        Length = c.Length,
+                        PositionalArgs = null,
+                        NamedArgs = c.Args ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    });
+                }
+            }
+            else
+            {
+                // --- FALLBACK: bracket syntax [MethodName(arg1, arg2)] (UNCHANGED behavior) ---
+                // The argument-list grammar (inside the inner non-capturing group) accepts in priority order:
+                //   1. """...""" — triple-quoted raw multi-line string (no escape processing)
+                //      Pattern: """(?:[^"]|"(?!""))*""" — matches anything not containing 3 consecutive quotes
+                //   2. [^'"()]* — bare characters
+                //   3. '...' — single-quoted string
+                //   4. "..." — double-quoted string
+                // Triple-quoted MUST come first so the matcher does not consume it as a sequence of empty "" tokens.
+                const string ArgsPattern = @"(?:""""""(?:[^""]|""(?!""""))*""""""|[^'""()]*|'[^']*'|""[^""]*"")*";
+
+                var matches = System.Text.RegularExpressions.Regex.Matches(
+                    text, $@"\[(\w+)\(({ArgsPattern})\)\]",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+
+                if (matches.Count == 0)
+                {
+                    // Fallback: [MCP/server.MethodName(args)] or [prefix.MethodName(args)] format
+                    // Captures just the final method name after the last dot or slash
+                    matches = System.Text.RegularExpressions.Regex.Matches(
+                        text, $@"\[[\w/]+[./](\w+)\(({ArgsPattern})\)\]",
+                        System.Text.RegularExpressions.RegexOptions.Singleline);
+                }
+
+                if (matches.Count == 0)
+                {
+                    // Fallback: [Category: MethodName(args)] format (some models add a label prefix)
+                    matches = System.Text.RegularExpressions.Regex.Matches(
+                        text, $@"\[\w+:\s*(\w+)\(({ArgsPattern})\)\]",
+                        System.Text.RegularExpressions.RegexOptions.Singleline);
+                }
+
+                if (matches.Count == 0)
+                {
+                    // Fallback: match line-only MethodName(args) without brackets
+                    // (some models omit the square brackets)
+                    matches = System.Text.RegularExpressions.Regex.Matches(text, @"^(\w+)\((.*)\)\s*$",
+                        System.Text.RegularExpressions.RegexOptions.Multiline);
+                }
+
+                if (matches.Count == 0)
+                {
+                    // Fallback: backtick-wrapped tool calls — `MethodName(args)` or ```MethodName(args)```
+                    // (some models wrap tool calls in markdown code formatting)
+                    matches = System.Text.RegularExpressions.Regex.Matches(text, @"^`+(\w+)\(((?:[^'""()]*|'[^']*'|""[^""]*"")*)\)`+\s*$",
+                        System.Text.RegularExpressions.RegexOptions.Multiline);
+                }
+
+                if (matches.Count == 0)
+                {
+                    // Fallback: MethodName(args) at start of line followed by non-tool text
+                    // Handles cases like: FindFaceEmo()を呼び出して... or ListBlendShapesEx("Body")を確認
+                    // Uses balanced parentheses matching for simple args
+                    var lenientMatches = System.Text.RegularExpressions.Regex.Matches(text,
+                        @"^(\w+)\(([^)]*)\)",
+                        System.Text.RegularExpressions.RegexOptions.Multiline);
+                    // Only accept if at least one match is a known tool name
+                    var toolNames = new HashSet<string>(
+                        GetToolMethods().Select(m => m.Name),
+                        StringComparer.OrdinalIgnoreCase);
+                    foreach (var mn in MCPManager.GetToolNames()) toolNames.Add(mn);
+                    foreach (var mn in BuiltinMCPToolNames) toolNames.Add(mn);
+                    var validMatches = new List<System.Text.RegularExpressions.Match>();
+                    foreach (System.Text.RegularExpressions.Match lm in lenientMatches)
+                    {
+                        if (lm.Success && toolNames.Contains(lm.Groups[1].Value))
+                            validMatches.Add(lm);
                     }
-                    if (!overlaps)
-                        matchList.Add(im);
+                    if (validMatches.Count > 0)
+                    {
+                        // Re-run with the same regex — matches already validated above
+                        matches = lenientMatches;
+                    }
+                }
+
+                // --- Supplemental: detect tool calls embedded in running text ---
+                // Earlier stages may miss unbracketed calls mid-sentence
+                // (e.g. "次に AnalyzeGimmickStructure("TK") で確認")
+                // This pass always runs and adds non-overlapping, tool-name-validated matches.
+                var bracketMatches = new List<System.Text.RegularExpressions.Match>();
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                    if (m.Success) bracketMatches.Add(m);
+
+                {
+                    var inlineToolNames = new HashSet<string>(
+                        GetToolMethods().Select(m => m.Name),
+                        StringComparer.OrdinalIgnoreCase);
+                    foreach (var mn in MCPManager.GetToolNames()) inlineToolNames.Add(mn);
+                    foreach (var mn in BuiltinMCPToolNames) inlineToolNames.Add(mn);
+                    var inlineMatches = System.Text.RegularExpressions.Regex.Matches(text,
+                        @"(?<!\.)(\w+)\(((?:[^'""()]*|'[^']*'|""[^""]*"")*)\)");
+                    foreach (System.Text.RegularExpressions.Match im in inlineMatches)
+                    {
+                        if (!im.Success || !inlineToolNames.Contains(im.Groups[1].Value))
+                            continue;
+                        // Skip if overlapping with an existing match
+                        bool overlaps = false;
+                        foreach (var existing in bracketMatches)
+                        {
+                            if (im.Index < existing.Index + existing.Length
+                                && im.Index + im.Length > existing.Index)
+                            { overlaps = true; break; }
+                        }
+                        if (!overlaps)
+                            bracketMatches.Add(im);
+                    }
+                }
+
+                // Convert bracket regex matches into neutral ToolCallMatch entries.
+                // Name=Groups[1], args from Groups[2] via SplitArguments (positional + key=value).
+                foreach (var m in bracketMatches)
+                {
+                    matchList.Add(new ToolCallMatch
+                    {
+                        Name = m.Groups[1].Value,
+                        Index = m.Index,
+                        Length = m.Length,
+                        PositionalArgs = SplitArguments(m.Groups[2].Value),
+                        NamedArgs = null,
+                    });
                 }
             }
 
@@ -849,8 +917,8 @@ namespace AjisaiFlow.UnityAgent.Editor
                 var confirmNeeded = new List<BatchToolItem>();
                 foreach (var m in matchList)
                 {
-                    if (!m.Success) continue;
-                    string mName = m.Groups[1].Value;
+                    if (string.IsNullOrEmpty(m.Name)) continue;
+                    string mName = m.Name;
                     var mMethod = GetToolMethods().FirstOrDefault(mt =>
                         string.Equals(mt.Name, mName, StringComparison.OrdinalIgnoreCase));
                     if (mMethod != null && AgentSettings.IsToolConfirmRequired(mMethod.Name))
@@ -860,7 +928,7 @@ namespace AjisaiFlow.UnityAgent.Editor
                         {
                             toolName = mMethod.Name,
                             description = mAttr?.Description ?? mMethod.Name,
-                            parameters = m.Groups[2].Value.Trim(),
+                            parameters = m.ParamsDisplay(),
                             approved = true
                         });
                     }
@@ -892,11 +960,12 @@ namespace AjisaiFlow.UnityAgent.Editor
             {
                 if (!_isProcessing) yield break;
 
-                if (match.Success)
+                if (!string.IsNullOrEmpty(match.Name))
                 {
-                    var methodName = match.Groups[1].Value;
-                    var argsString = match.Groups[2].Value;
-                    var argsRaw = SplitArguments(argsString);
+                    var methodName = match.Name;
+                    bool isXmlCall = match.NamedArgs != null;
+                    // Bracket path: positional/named tokens. XML path: empty (MCP/builtin paths read NamedArgs).
+                    var argsRaw = match.PositionalArgs ?? new string[0];
 
                     var method = GetToolMethods().FirstOrDefault(m =>
                         string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase));
@@ -917,17 +986,8 @@ namespace AjisaiFlow.UnityAgent.Editor
                         try
                         {
                             // Log execution attempt
-                            string paramsLog = string.Join(", ", argsRaw.Select(a => a.Trim()));
+                            string paramsLog = match.ParamsDisplay();
                             onStatus?.Invoke($"Executing Tool: {methodName}({paramsLog})");
-
-                            // Pre-validate argument count
-                            int requiredParamCount = parameterInfos.Count(p => !p.HasDefaultValue);
-                            if (argsRaw.Length > parameterInfos.Length)
-                            {
-                                results.Add(GenerateUsageError(method,
-                                    $"Error: Too many arguments for {methodName}. Got {argsRaw.Length}, max {parameterInfos.Length} ({requiredParamCount} required, {parameterInfos.Length - requiredParamCount} optional)."));
-                                goto NextMatch;
-                            }
 
                             // Initialize all with defaults
                             for (int i = 0; i < parameterInfos.Length; i++)
@@ -936,79 +996,129 @@ namespace AjisaiFlow.UnityAgent.Editor
                                     typedArgs[i] = parameterInfos[i].DefaultValue;
                             }
 
-                            // Unified parser: support mixed positional and named args
-                            int positionalIdx = 0;
-                            for (int rawIdx = 0; rawIdx < argsRaw.Length; rawIdx++)
+                            if (isXmlCall)
                             {
-                                string rawArg = argsRaw[rawIdx].Trim();
-
-                                // Check if this is a named argument (name=value)
-                                // Skip named-arg detection for quoted literals (e.g. 'Shrink_A=100;Shrink_B=50')
-                                bool isQuotedLiteral = (rawArg.Length >= 2)
-                                    && ((rawArg[0] == '\'' && rawArg[rawArg.Length - 1] == '\'')
-                                     || (rawArg[0] == '"'  && rawArg[rawArg.Length - 1] == '"'));
-                                int eqIdx = isQuotedLiteral ? -1 : rawArg.IndexOf('=');
-                                if (eqIdx > 0)
+                                // --- XML named-arg binding ---
+                                // Each <arg name="X"> binds to ParameterInfo.Name (case-insensitive),
+                                // mirroring the bracket key=value logic. Values are ALREADY decoded by
+                                // XmlToolCallParser — do NOT run UnquoteAndUnescape on them.
+                                foreach (var kv in match.NamedArgs)
                                 {
-                                    string possibleName = rawArg.Substring(0, eqIdx).Trim().Trim('\'', '"');
-                                    // Only treat as named arg if key is a valid identifier (no spaces/special chars)
-                                    if (System.Text.RegularExpressions.Regex.IsMatch(possibleName, @"^\w+$"))
+                                    int namedIdx = -1;
+                                    for (int i = 0; i < parameterInfos.Length; i++)
                                     {
-                                        string valueAfterEq = UnquoteAndUnescape(rawArg.Substring(eqIdx + 1));
-
-                                        int namedIdx = -1;
-                                        for (int i = 0; i < parameterInfos.Length; i++)
+                                        if (string.Equals(parameterInfos[i].Name, kv.Key, StringComparison.OrdinalIgnoreCase))
                                         {
-                                            if (string.Equals(parameterInfos[i].Name, possibleName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                namedIdx = i;
-                                                break;
-                                            }
+                                            namedIdx = i;
+                                            break;
                                         }
+                                    }
 
-                                        if (namedIdx >= 0)
-                                        {
-                                            try
-                                            {
-                                                typedArgs[namedIdx] = Convert.ChangeType(valueAfterEq, parameterInfos[namedIdx].ParameterType);
-                                            }
-                                            catch (Exception)
-                                            {
-                                                results.Add(GenerateUsageError(method,
-                                                    $"Error: Cannot convert '{valueAfterEq}' to {parameterInfos[namedIdx].ParameterType.Name} for parameter '{parameterInfos[namedIdx].Name}'."));
-                                                goto NextMatch;
-                                            }
-                                            continue;
-                                        }
-
-                                        // Named arg key doesn't match any parameter name — return error with valid names
+                                    if (namedIdx < 0)
+                                    {
+                                        // Unknown arg name — error with the valid parameter names.
                                         results.Add(GenerateUsageError(method,
-                                            $"Error: Unknown parameter '{possibleName}' for {methodName}. Valid parameter names: {string.Join(", ", parameterInfos.Select(p => p.Name))}"));
+                                            $"Error: Unknown parameter '{kv.Key}' for {methodName}. Valid parameter names: {string.Join(", ", parameterInfos.Select(p => p.Name))}"));
                                         goto NextMatch;
                                     }
-                                }
 
-                                // Positional arg: assign to next open slot
-                                while (positionalIdx < parameterInfos.Length && typedArgs[positionalIdx] != null
-                                       && !(parameterInfos[positionalIdx].HasDefaultValue && typedArgs[positionalIdx].Equals(parameterInfos[positionalIdx].DefaultValue)))
-                                {
-                                    positionalIdx++;
-                                }
-
-                                if (positionalIdx < parameterInfos.Length)
-                                {
-                                    string arg = UnquoteAndUnescape(rawArg);
                                     try
                                     {
-                                        typedArgs[positionalIdx] = Convert.ChangeType(arg, parameterInfos[positionalIdx].ParameterType);
+                                        typedArgs[namedIdx] = ConvertStringToParam(kv.Value, parameterInfos[namedIdx].ParameterType);
                                     }
                                     catch (Exception)
                                     {
                                         results.Add(GenerateUsageError(method,
-                                            $"Error: Cannot convert '{arg}' to {parameterInfos[positionalIdx].ParameterType.Name} for parameter '{parameterInfos[positionalIdx].Name}'."));
+                                            $"Error: Cannot convert '{kv.Value}' to {parameterInfos[namedIdx].ParameterType.Name} for parameter '{parameterInfos[namedIdx].Name}'."));
                                         goto NextMatch;
                                     }
-                                    positionalIdx++;
+                                }
+                            }
+                            else
+                            {
+                                // Pre-validate argument count (bracket path)
+                                int requiredParamCount = parameterInfos.Count(p => !p.HasDefaultValue);
+                                if (argsRaw.Length > parameterInfos.Length)
+                                {
+                                    results.Add(GenerateUsageError(method,
+                                        $"Error: Too many arguments for {methodName}. Got {argsRaw.Length}, max {parameterInfos.Length} ({requiredParamCount} required, {parameterInfos.Length - requiredParamCount} optional)."));
+                                    goto NextMatch;
+                                }
+
+                                // Unified parser: support mixed positional and named args
+                                int positionalIdx = 0;
+                                for (int rawIdx = 0; rawIdx < argsRaw.Length; rawIdx++)
+                                {
+                                    string rawArg = argsRaw[rawIdx].Trim();
+
+                                    // Check if this is a named argument (name=value)
+                                    // Skip named-arg detection for quoted literals (e.g. 'Shrink_A=100;Shrink_B=50')
+                                    bool isQuotedLiteral = (rawArg.Length >= 2)
+                                        && ((rawArg[0] == '\'' && rawArg[rawArg.Length - 1] == '\'')
+                                         || (rawArg[0] == '"'  && rawArg[rawArg.Length - 1] == '"'));
+                                    int eqIdx = isQuotedLiteral ? -1 : rawArg.IndexOf('=');
+                                    if (eqIdx > 0)
+                                    {
+                                        string possibleName = rawArg.Substring(0, eqIdx).Trim().Trim('\'', '"');
+                                        // Only treat as named arg if key is a valid identifier (no spaces/special chars)
+                                        if (System.Text.RegularExpressions.Regex.IsMatch(possibleName, @"^\w+$"))
+                                        {
+                                            string valueAfterEq = UnquoteAndUnescape(rawArg.Substring(eqIdx + 1));
+
+                                            int namedIdx = -1;
+                                            for (int i = 0; i < parameterInfos.Length; i++)
+                                            {
+                                                if (string.Equals(parameterInfos[i].Name, possibleName, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    namedIdx = i;
+                                                    break;
+                                                }
+                                            }
+
+                                            if (namedIdx >= 0)
+                                            {
+                                                try
+                                                {
+                                                    typedArgs[namedIdx] = Convert.ChangeType(valueAfterEq, parameterInfos[namedIdx].ParameterType);
+                                                }
+                                                catch (Exception)
+                                                {
+                                                    results.Add(GenerateUsageError(method,
+                                                        $"Error: Cannot convert '{valueAfterEq}' to {parameterInfos[namedIdx].ParameterType.Name} for parameter '{parameterInfos[namedIdx].Name}'."));
+                                                    goto NextMatch;
+                                                }
+                                                continue;
+                                            }
+
+                                            // Named arg key doesn't match any parameter name — return error with valid names
+                                            results.Add(GenerateUsageError(method,
+                                                $"Error: Unknown parameter '{possibleName}' for {methodName}. Valid parameter names: {string.Join(", ", parameterInfos.Select(p => p.Name))}"));
+                                            goto NextMatch;
+                                        }
+                                    }
+
+                                    // Positional arg: assign to next open slot
+                                    while (positionalIdx < parameterInfos.Length && typedArgs[positionalIdx] != null
+                                           && !(parameterInfos[positionalIdx].HasDefaultValue && typedArgs[positionalIdx].Equals(parameterInfos[positionalIdx].DefaultValue)))
+                                    {
+                                        positionalIdx++;
+                                    }
+
+                                    if (positionalIdx < parameterInfos.Length)
+                                    {
+                                        string arg = UnquoteAndUnescape(rawArg);
+                                        try
+                                        {
+                                            typedArgs[positionalIdx] = Convert.ChangeType(arg, parameterInfos[positionalIdx].ParameterType);
+                                        }
+                                        catch (Exception)
+                                        {
+                                            results.Add(GenerateUsageError(method,
+                                                $"Error: Cannot convert '{arg}' to {parameterInfos[positionalIdx].ParameterType.Name} for parameter '{parameterInfos[positionalIdx].Name}'."));
+                                            goto NextMatch;
+                                        }
+                                        positionalIdx++;
+                                    }
                                 }
                             }
 
@@ -1069,7 +1179,7 @@ namespace AjisaiFlow.UnityAgent.Editor
                         {
                             var attr = ToolRegistry.GetAgentToolAttribute(method);
                             string desc = attr?.Description ?? method.Name;
-                            string paramsStr = string.Join(", ", argsRaw.Select(a => a.Trim()));
+                            string paramsStr = match.ParamsDisplay();
 
                             ToolConfirmState.Request(method.Name, desc, paramsStr);
                             onStatus?.Invoke("__TOOL_CONFIRM__");
@@ -1170,6 +1280,15 @@ namespace AjisaiFlow.UnityAgent.Editor
                         string mcpBuiltinResult = null;
                         string mcpBuiltinError = null;
 
+                        // Resolve a builtin arg by NAME (XML calls) or POSITION (bracket calls).
+                        // XML args are already decoded; bracket positional args need quote stripping.
+                        Func<string, int, string> builtinArg = (argName, posIdx) =>
+                        {
+                            if (isXmlCall)
+                                return match.NamedArgs.TryGetValue(argName, out var v) ? v : "";
+                            return argsRaw.Length > posIdx ? argsRaw[posIdx].Trim().Trim('\'', '"') : "";
+                        };
+
                         if (methodName == "ListMCPResources")
                         {
                             var allRes = MCPManager.GetAllResources();
@@ -1207,7 +1326,7 @@ namespace AjisaiFlow.UnityAgent.Editor
                         }
                         else if (methodName == "ReadMCPResource")
                         {
-                            string uri = argsRaw.Length > 0 ? argsRaw[0].Trim().Trim('\'', '"') : "";
+                            string uri = builtinArg("uri", 0);
                             if (string.IsNullOrEmpty(uri))
                                 mcpBuiltinError = "ReadMCPResource requires a URI argument.";
                             else
@@ -1225,7 +1344,10 @@ namespace AjisaiFlow.UnityAgent.Editor
                         }
                         else if (methodName == "GetMCPPrompt")
                         {
-                            string promptName = argsRaw.Length > 0 ? argsRaw[0].Trim().Trim('\'', '"') : "";
+                            // Prompt name accepted as 'name' (XML/bracket) or first positional arg.
+                            string promptName = isXmlCall
+                                ? (match.NamedArgs.TryGetValue("name", out var nm) ? nm : builtinArg("promptName", 0))
+                                : builtinArg("name", 0);
                             if (string.IsNullOrEmpty(promptName))
                                 mcpBuiltinError = "GetMCPPrompt requires a prompt name argument.";
                             else
@@ -1236,9 +1358,12 @@ namespace AjisaiFlow.UnityAgent.Editor
                                 else
                                 {
                                     JNode promptArgs = JNode.Obj();
-                                    if (argsRaw.Length > 1)
+                                    // Prompt arguments JSON: 'arguments' arg (XML) or second positional (bracket).
+                                    string argsJson = isXmlCall
+                                        ? (match.NamedArgs.TryGetValue("arguments", out var aj) ? aj : "")
+                                        : (argsRaw.Length > 1 ? argsRaw[1].Trim().Trim('\'', '"') : "");
+                                    if (!string.IsNullOrEmpty(argsJson))
                                     {
-                                        string argsJson = argsRaw[1].Trim().Trim('\'', '"');
                                         var parsed = JNode.Parse(argsJson);
                                         if (parsed != null && parsed.Type == JNode.JType.Object)
                                             promptArgs = parsed;
@@ -1271,8 +1396,11 @@ namespace AjisaiFlow.UnityAgent.Editor
                             var (mcpClient, mcpTool) = mcpResult.Value;
                             onStatus?.Invoke($"Executing MCP Tool: {mcpClient.ServerName}/{methodName}");
 
-                            // Build JSON arguments from positional/named args
-                            var jsonArgs = MCPManager.BuildArguments(mcpTool, argsRaw);
+                            // Build JSON arguments. XML calls pass the named-arg dictionary directly
+                            // (each value maps to a param by name); bracket calls use positional/key=value.
+                            var jsonArgs = isXmlCall
+                                ? MCPManager.BuildArguments(mcpTool, match.NamedArgs)
+                                : MCPManager.BuildArguments(mcpTool, argsRaw);
 
                             string mcpResultText = null;
                             string mcpError = null;
@@ -1374,6 +1502,65 @@ namespace AjisaiFlow.UnityAgent.Editor
                 sb.Append(c);
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 文字列値 (XML &lt;arg&gt; 由来) を目的のパラメータ型へ堅牢に変換する。
+        ///
+        /// Convert.ChangeType 単体より広い型を扱う:
+        ///   - string: そのまま返す (XML パーサで既にデコード済み — エスケープ処理しない)
+        ///   - enum: 大文字小文字を無視して名前一致 (Enum.Parse)、数値文字列なら数値として変換
+        ///   - bool: true/false に加え 1/0 も許容
+        ///   - int/long/short/byte/float/double/decimal: InvariantCulture で解析
+        ///   - Nullable&lt;T&gt;: 空文字なら null、それ以外は基底型へ委譲
+        ///   - その他: Convert.ChangeType(InvariantCulture) にフォールバック
+        ///
+        /// AgentMCPServer.Invoker.ConvertJsonToParam の堅牢な変換規則を文字列入力向けに踏襲したもの。
+        /// 変換不能時は例外を投げる (呼び出し側が GenerateUsageError に変換する)。
+        /// </summary>
+        private static object ConvertStringToParam(string value, Type targetType)
+        {
+            if (targetType == typeof(string))
+                return value;
+
+            // Nullable<T>: 空文字を null、それ以外は基底型で変換。
+            Type underlying = Nullable.GetUnderlyingType(targetType);
+            if (underlying != null)
+            {
+                if (string.IsNullOrEmpty(value))
+                    return null;
+                return ConvertStringToParam(value, underlying);
+            }
+
+            if (targetType.IsEnum)
+            {
+                // 数値文字列なら整数値として、それ以外は名前 (大文字小文字無視) で解決。
+                string trimmedEnum = value.Trim();
+                if (long.TryParse(trimmedEnum, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out long enumNum))
+                    return Enum.ToObject(targetType, enumNum);
+                return Enum.Parse(targetType, trimmedEnum, ignoreCase: true);
+            }
+
+            if (targetType == typeof(bool))
+            {
+                string t = value.Trim();
+                if (bool.TryParse(t, out bool bv)) return bv;
+                if (t == "1") return true;
+                if (t == "0") return false;
+                throw new FormatException($"Cannot parse '{value}' as bool (use true/false).");
+            }
+
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            if (targetType == typeof(int)) return int.Parse(value.Trim(), System.Globalization.NumberStyles.Integer, ci);
+            if (targetType == typeof(long)) return long.Parse(value.Trim(), System.Globalization.NumberStyles.Integer, ci);
+            if (targetType == typeof(short)) return short.Parse(value.Trim(), System.Globalization.NumberStyles.Integer, ci);
+            if (targetType == typeof(byte)) return byte.Parse(value.Trim(), System.Globalization.NumberStyles.Integer, ci);
+            if (targetType == typeof(float)) return float.Parse(value.Trim(), System.Globalization.NumberStyles.Float, ci);
+            if (targetType == typeof(double)) return double.Parse(value.Trim(), System.Globalization.NumberStyles.Float, ci);
+            if (targetType == typeof(decimal)) return decimal.Parse(value.Trim(), System.Globalization.NumberStyles.Float, ci);
+
+            return Convert.ChangeType(value, targetType, ci);
         }
 
         /// <summary>
@@ -1514,34 +1701,47 @@ namespace AjisaiFlow.UnityAgent.Editor
             int requiredCount = parameters.Count(p => !p.HasDefaultValue);
             int optionalCount = parameters.Length - requiredCount;
 
-            sb.Append("Expected usage: [");
-            sb.Append(method.Name);
-            sb.Append("(");
-
-            for (int i = 0; i < parameters.Length; i++)
+            // Parameter reference (names, types, REQUIRED/default, hints).
+            sb.Append("Parameters: ");
+            if (parameters.Length == 0)
             {
-                var p = parameters[i];
-                if (p.HasDefaultValue)
-                {
-                    sb.Append($"{p.ParameterType.Name} {p.Name}");
-                    if (p.DefaultValue == null) sb.Append(" = null");
-                    else if (p.DefaultValue is string) sb.Append($" = \"{p.DefaultValue}\"");
-                    else if (p.DefaultValue is bool) sb.Append($" = {p.DefaultValue.ToString().ToLower()}");
-                    else sb.Append($" = {p.DefaultValue}");
-                }
-                else
-                {
-                    sb.Append($"{p.ParameterType.Name} {p.Name} [REQUIRED]");
-                }
-                if (ParamHints.TryGetValue($"{method.Name}.{p.Name}", out var hint))
-                    sb.Append($" ({hint})");
-
-                if (i < parameters.Length - 1) sb.Append(", ");
+                sb.Append("(none)");
             }
+            else
+            {
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    var p = parameters[i];
+                    if (p.HasDefaultValue)
+                    {
+                        sb.Append($"{p.ParameterType.Name} {p.Name}");
+                        if (p.DefaultValue == null) sb.Append(" = null");
+                        else if (p.DefaultValue is string) sb.Append($" = \"{p.DefaultValue}\"");
+                        else if (p.DefaultValue is bool) sb.Append($" = {p.DefaultValue.ToString().ToLower()}");
+                        else sb.Append($" = {p.DefaultValue}");
+                    }
+                    else
+                    {
+                        sb.Append($"{p.ParameterType.Name} {p.Name} [REQUIRED]");
+                    }
+                    if (ParamHints.TryGetValue($"{method.Name}.{p.Name}", out var hint))
+                        sb.Append($" ({hint})");
 
-            sb.Append(")]");
+                    if (i < parameters.Length - 1) sb.Append(", ");
+                }
+            }
             sb.AppendLine();
-            sb.Append($"Parameters: {requiredCount} REQUIRED, {optionalCount} optional. You MUST provide all REQUIRED parameters.");
+
+            // Expected XML usage: one <arg> per parameter (values are raw, no escaping).
+            sb.AppendLine("Expected usage:");
+            sb.AppendLine($"<tool name=\"{method.Name}\">");
+            foreach (var p in parameters)
+            {
+                string placeholder = !p.HasDefaultValue ? "..." : "...optional...";
+                sb.AppendLine($"<arg name=\"{p.Name}\">{placeholder}</arg>");
+            }
+            sb.AppendLine("</tool>");
+            sb.Append($"{requiredCount} REQUIRED, {optionalCount} optional. You MUST provide all REQUIRED parameters; omit optional ones you don't need.");
             return sb.ToString();
         }
 
@@ -1583,6 +1783,15 @@ namespace AjisaiFlow.UnityAgent.Editor
                     coreByCategory[cat] = new List<MethodInfo>();
                 coreByCategory[cat].Add(m);
             }
+
+            // Teach the XML call shape once, then list tools as compact signatures below.
+            // Each signature shows param names + types + REQUIRED/optional defaults; to call a tool,
+            // emit one <arg name="..."> per parameter you want to pass.
+            sb.AppendLine("\nTo call any tool below, emit:");
+            sb.AppendLine("  <tool name=\"ToolName\">");
+            sb.AppendLine("  <arg name=\"paramName\">value</arg>");
+            sb.AppendLine("  </tool>");
+            sb.AppendLine("  (one <arg> per parameter; values are raw — no escaping; omit optional params you don't need.)");
 
             sb.AppendLine("\nCore Tools (always available — use directly):");
             foreach (var cat in coreCategoryOrder)
@@ -1656,7 +1865,7 @@ namespace AjisaiFlow.UnityAgent.Editor
                         }
                     }
                 }
-                sb.AppendLine("  Call MCP tools using just the tool name, e.g., [get_current_config()] not [MCP/serena.get_current_config()].");
+                sb.AppendLine("  Call MCP tools by their bare tool name in the <tool name=\"...\"> attribute (e.g., name=\"get_current_config\", not \"serena.get_current_config\").");
 
                 // MCP Resources (if any)
                 var mcpResources = MCPManager.GetAllResources();
@@ -1668,8 +1877,8 @@ namespace AjisaiFlow.UnityAgent.Editor
                         string resDesc = !string.IsNullOrEmpty(res.Description) ? $" — {res.Description}" : "";
                         sb.AppendLine($"  [{srvName}] {res.Name} ({res.Uri}){resDesc}");
                     }
-                    sb.AppendLine("  To read a resource: [ReadMCPResource(\"uri\")]");
-                    sb.AppendLine("  To list all resources: [ListMCPResources()]");
+                    sb.AppendLine("  To read a resource: <tool name=\"ReadMCPResource\"><arg name=\"uri\">the-uri</arg></tool>");
+                    sb.AppendLine("  To list all resources: <tool name=\"ListMCPResources\"></tool>");
                 }
 
                 // MCP Prompts (if any)
@@ -1685,8 +1894,8 @@ namespace AjisaiFlow.UnityAgent.Editor
                             argInfo = $" args: [{string.Join(", ", p.Arguments.Select(a => a.Required ? a.Name + " [REQUIRED]" : a.Name))}]";
                         sb.AppendLine($"  [{srvName}] {p.Name}{pDesc}{argInfo}");
                     }
-                    sb.AppendLine("  To get a prompt: [GetMCPPrompt(\"name\", '{\"arg\": \"value\"}')]");
-                    sb.AppendLine("  To list all prompts: [ListMCPPrompts()]");
+                    sb.AppendLine("  To get a prompt: <tool name=\"GetMCPPrompt\"><arg name=\"name\">prompt-name</arg><arg name=\"arguments\">{\"arg\": \"value\"}</arg></tool>");
+                    sb.AppendLine("  To list all prompts: <tool name=\"ListMCPPrompts\"></tool>");
                 }
             }
 
@@ -1729,15 +1938,17 @@ namespace AjisaiFlow.UnityAgent.Editor
         }
 
         private const string FallbackSystemPrompt =
-            "You are an AI Agent for Unity Editor. Operate it by calling tools with [MethodName(args)].\n\n" +
+            "You are an AI Agent for Unity Editor. Operate it by calling ONE tool per turn using this XML shape:\n" +
+            "<tool name=\"ToolName\">\n<arg name=\"paramName\">value</arg>\n</tool>\n" +
+            "Values are raw — write multi-line content, code, JSON, quotes, < > & symbols verbatim; no escaping needed (standard XML entities like &lt; &gt; &amp; are also decoded). To include a literal </arg> in a value, escape it as &lt;/arg&gt;. Omit optional params.\n\n" +
             "{{TOOLS}}\n\n" +
             "<rules>\n" +
-            "- Reply in {{LANG}}. Write a one-line reason, then end the turn with EXACTLY ONE tool call on the last line; stop immediately after it (no trailing text, no second tool).\n" +
+            "- Reply in {{LANG}}. Write a one-line reason, then end the turn with EXACTLY ONE <tool>...</tool> block; stop immediately after </tool> (no trailing text, no second tool).\n" +
             "- Never fabricate a tool's result, paths, or values; plan only from the real result the system returns.\n" +
             "- Do ONLY what the user asked, then summarize and STOP. Inspect the scene yourself (ListRootObjects, InspectGameObject) instead of asking about structure / names / errors.\n" +
             "- For anything beyond Core Tools, run SearchTools(\"keyword\") and ReadSkill(\"skill\") before acting. Before mesh changes call ScanAvatarMeshes; after visual changes call CaptureSceneView and confirm with AskUser.\n" +
             "</rules>\n\n" +
-            "<skills>\nUse SearchSkills(keyword) / ReadSkill(name) for procedures.\n{{SKILLS}}\n</skills>\n";
+            "<skills>\nUse SearchSkills / ReadSkill for procedures.\n{{SKILLS}}\n</skills>\n";
 
         private static string FormatTokenCount(int tokens)
         {

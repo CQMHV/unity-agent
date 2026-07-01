@@ -103,7 +103,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
             sb.AppendLine("# UNITY EDITOR AI AGENT — 手動入力モード");
             sb.AppendLine();
             sb.AppendLine("以下のシステム指示と会話履歴を読み、**アシスタントとして1回だけ応答してください**。");
-            sb.AppendLine("ツール呼び出しは必ず `[MethodName(arg1, arg2)]` の形式でテキストとして出力してください。");
+            sb.AppendLine("ツール呼び出しは必ず `<tool name=\"ツール名\"><arg name=\"引数名\">値</arg></tool>` の XML 形式でテキストとして出力してください（1応答に最大1つ。詳細はシステム指示参照）。");
             sb.AppendLine();
 
             if (!string.IsNullOrEmpty(systemPrompt))

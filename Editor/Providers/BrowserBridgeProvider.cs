@@ -150,7 +150,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Providers
             var sb = new StringBuilder();
             sb.AppendLine("# UNITY EDITOR AI AGENT — Browser Bridge モード\n");
             sb.AppendLine("以下のシステム指示と会話履歴を読み、**アシスタントとして1回だけ応答してください**。");
-            sb.AppendLine("ツール呼び出しは必ず `[MethodName(arg1, arg2)]` の形式でテキストとして出力してください。\n");
+            sb.AppendLine("ツール呼び出しは必ず `<tool name=\"ツール名\"><arg name=\"引数名\">値</arg></tool>` の XML 形式でテキストとして出力してください（詳細はシステム指示参照）。\n");
             sb.AppendLine("**重要なルール:**");
             sb.AppendLine("- ユーザーが明示的に依頼していない操作のツールを呼ばないこと。");
             sb.AppendLine("- 挨拶や質問への返答だけで十分な場合は、ツールを一切呼ばずテキストだけで応答すること。");

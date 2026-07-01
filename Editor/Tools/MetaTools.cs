@@ -114,6 +114,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
 
             var sb = new StringBuilder();
             sb.AppendLine($"Found {matchedTools.Count} tools matching '{keyword}':");
+            sb.AppendLine("Call a tool with: <tool name=\"ToolName\"><arg name=\"param\">value</arg>...</tool> (one <arg> per param; values raw, no escaping; omit optional params).");
 
             foreach (var toolInfo in matchedTools)
             {
@@ -152,7 +153,9 @@ namespace AjisaiFlow.UnityAgent.Editor.Tools
                 }));
 
                 string returnType = method.ReturnType == typeof(System.Collections.IEnumerator) ? "async" : method.ReturnType.Name;
-                sb.AppendLine($"  Usage: {method.Name}({parameters}) -> {returnType}");
+                string argNames = parms.Length == 0 ? "(no args)" : string.Join(" ", parms.Select(p => $"<arg name=\"{p.Name}\">"));
+                sb.AppendLine($"  Params: {(string.IsNullOrEmpty(parameters) ? "(none)" : parameters)} -> {returnType}");
+                sb.AppendLine($"  Call: <tool name=\"{method.Name}\"> {argNames} </tool>");
                 if (reqCount > 0)
                     sb.AppendLine($"  * {reqCount} REQUIRED parameter(s) must be provided.");
                 sb.AppendLine();
