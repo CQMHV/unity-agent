@@ -26,12 +26,15 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 ? TruncateToLines(text, maxPreviewLines)
                 : text;
 
-            var textLabel = new Label(displayText);
-            textLabel.style.fontSize = 12;
-            textLabel.style.color = theme.OnSurface;
-            textLabel.style.whiteSpace = WhiteSpace.Normal;
-            textLabel.selection.isSelectable = true;
-            container.Add(textLabel);
+            // 長文 (大量の検索結果・ファイル全文など) は 65535 頂点上限で丸ごと
+            // 非表示になるため、複数 Label に分割する。
+            container.Add(LongText.Build(displayText, l =>
+            {
+                l.style.fontSize = 12;
+                l.style.color = theme.OnSurface;
+                l.style.whiteSpace = WhiteSpace.Normal;
+                l.selection.isSelectable = true;
+            }));
 
             var results = ChatEntry.ParseResultsPublic(text);
             if (results != null && results.Count > 0)

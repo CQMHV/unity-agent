@@ -25,7 +25,8 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
         VisualElement _actionRow;
         Button _regenButton;
 
-        Label _textLabel;
+        // 本文・思考は 65535 頂点上限を避けるため長文で複数 Label に分割する
+        ChunkedLabel _body;
         string _rawText;
         VisualElement _linkEmbedContainer;
         bool _embedsBuilt;
@@ -34,7 +35,7 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
         VisualElement _agentBubble;
         MD3Theme _agentTheme;
         MD3Foldout _thinkingFoldout;
-        Label _thinkingLabel;
+        ChunkedLabel _thinkingLabel;
         int _renderedThinkingLen;
 
         ChatEntryView() { }
@@ -99,13 +100,13 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
         /// <summary>ストリーミング中のコンテンツ更新。</summary>
         public void UpdateContent(ChatEntry entry)
         {
-            if (_textLabel != null)
+            if (_body != null)
             {
                 string newText = entry.text ?? "";
                 if (newText != _rawText)
                 {
                     _rawText = newText;
-                    _textLabel.text = MarkdownToRichText(newText);
+                    _body.SetText(MarkdownToRichText(newText));
 
                     // Build embeds once streaming text stabilizes (has URLs)
                     if (!_embedsBuilt && _agentBubble != null && _agentTheme != null)
@@ -126,7 +127,7 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 {
                     EnsureThinkingFoldout(entry, _agentTheme);
                     if (_thinkingLabel != null)
-                        _thinkingLabel.text = thinking;
+                        _thinkingLabel.SetText(thinking);
                     if (_thinkingFoldout != null)
                     {
                         int lineCount = CountLines(thinking);
@@ -165,13 +166,16 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             thinkBg.style.borderBottomLeftRadius = 6;
             thinkBg.style.borderBottomRightRadius = 6;
 
-            _thinkingLabel = new Label(entry.thinkingText ?? "");
-            _thinkingLabel.style.color = theme.OnSurfaceVariant;
-            _thinkingLabel.style.fontSize = 11;
-            _thinkingLabel.style.whiteSpace = WhiteSpace.Normal;
-            _thinkingLabel.style.opacity = 0.85f;
-            _thinkingLabel.style.unityFontStyleAndWeight = FontStyle.Italic;
-            _thinkingLabel.selection.isSelectable = true;
+            _thinkingLabel = new ChunkedLabel(l =>
+            {
+                l.style.color = theme.OnSurfaceVariant;
+                l.style.fontSize = 11;
+                l.style.whiteSpace = WhiteSpace.Normal;
+                l.style.opacity = 0.85f;
+                l.style.unityFontStyleAndWeight = FontStyle.Italic;
+                l.selection.isSelectable = true;
+            });
+            _thinkingLabel.SetText(entry.thinkingText ?? "");
             thinkBg.Add(_thinkingLabel);
             _thinkingFoldout.Content.Add(thinkBg);
 
@@ -218,14 +222,15 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 bubble.Add(img);
             }
 
-            var label = new Label(displayText);
-            label.style.color = theme.OnPrimaryContainer;
-            label.style.fontSize = 14;
-            label.style.whiteSpace = WhiteSpace.Normal;
-            label.enableRichText = false;
-            bubble.Add(label);
+            // 長文 (巨大ログの貼り付け等) は 65535 頂点上限を避けるため分割
+            bubble.Add(LongText.Build(displayText, l =>
+            {
+                l.style.color = theme.OnPrimaryContainer;
+                l.style.fontSize = 14;
+                l.style.whiteSpace = WhiteSpace.Normal;
+                l.enableRichText = false;
+            }));
 
-            view._textLabel = label;
             view._rawText = displayText;
 
             // 右クリックでもコピー可（補助）
@@ -286,7 +291,7 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             {
                 view.EnsureThinkingFoldout(entry, theme);
                 if (view._thinkingLabel != null)
-                    view._thinkingLabel.text = entry.thinkingText;
+                    view._thinkingLabel.SetText(entry.thinkingText);
                 if (view._thinkingFoldout != null)
                 {
                     int lineCount = CountLines(entry.thinkingText);
@@ -297,17 +302,20 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 view._renderedThinkingLen = entry.thinkingText.Length;
             }
 
-            // メイン テキスト
+            // メイン テキスト (長文は 65535 頂点上限を避けるためチャンク分割)
             string displayText = entry.text ?? "";
-            var label = new Label(MarkdownToRichText(displayText));
-            label.enableRichText = true;
-            label.style.color = theme.OnSurface;
-            label.style.fontSize = 14;
-            label.style.whiteSpace = WhiteSpace.Normal;
-            label.selection.isSelectable = true;
-            bubble.Add(label);
+            var body = new ChunkedLabel(l =>
+            {
+                l.enableRichText = true;
+                l.style.color = theme.OnSurface;
+                l.style.fontSize = 14;
+                l.style.whiteSpace = WhiteSpace.Normal;
+                l.selection.isSelectable = true;
+            });
+            body.SetText(MarkdownToRichText(displayText));
+            bubble.Add(body);
 
-            view._textLabel = label;
+            view._body = body;
             view._rawText = displayText;
 
             // Extract all URLs (from both markdown links and bare URLs)
@@ -492,14 +500,14 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             row.style.alignItems = Align.Center;
 
             string text = entry.text ?? "";
-            var label = new Label(text);
-            label.style.fontSize = 12;
-            label.style.color = theme.OnSurfaceVariant;
-            label.style.whiteSpace = WhiteSpace.Normal;
-            label.style.flexShrink = 1;
-            row.Add(label);
+            row.Add(LongText.Build(text, l =>
+            {
+                l.style.fontSize = 12;
+                l.style.color = theme.OnSurfaceVariant;
+                l.style.whiteSpace = WhiteSpace.Normal;
+                l.style.flexShrink = 1;
+            }));
 
-            view._textLabel = label;
             view._rawText = text;
 
             // 画像プレビュー (SceneView キャプチャ等)
@@ -534,13 +542,13 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
             var bubble = new MD3Card(null, null, MD3CardStyle.Filled);
             bubble.style.backgroundColor = new Color(theme.Error.r, theme.Error.g, theme.Error.b, 0.15f);
 
-            var label = new Label(entry.text ?? "");
-            label.style.color = theme.Error;
-            label.style.fontSize = 13;
-            label.style.whiteSpace = WhiteSpace.Normal;
-            bubble.Add(label);
+            bubble.Add(LongText.Build(entry.text ?? "", l =>
+            {
+                l.style.color = theme.Error;
+                l.style.fontSize = 13;
+                l.style.whiteSpace = WhiteSpace.Normal;
+            }));
 
-            view._textLabel = label;
             view._rawText = entry.text;
 
             view.Add(bubble);
@@ -568,7 +576,6 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 qLabel.style.marginBottom = 8;
                 view.Add(qLabel);
 
-                view._textLabel = qLabel;
                 view._rawText = entry.text;
             }
 

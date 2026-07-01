@@ -91,12 +91,13 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 var pairs = ToolArgsFormatter.Parse(entry.toolName, entry.toolArgsRaw);
                 if (pairs.Count == 0)
                 {
-                    var raw = new Label(entry.toolArgsRaw);
-                    raw.style.fontSize = 11;
-                    raw.style.color = theme.OnSurfaceVariant;
-                    raw.style.whiteSpace = WhiteSpace.Normal;
-                    raw.selection.isSelectable = true;
-                    argsFold.Content.Add(raw);
+                    argsFold.Content.Add(LongText.Build(entry.toolArgsRaw, l =>
+                    {
+                        l.style.fontSize = 11;
+                        l.style.color = theme.OnSurfaceVariant;
+                        l.style.whiteSpace = WhiteSpace.Normal;
+                        l.selection.isSelectable = true;
+                    }));
                 }
                 else
                 {
@@ -188,12 +189,14 @@ namespace AjisaiFlow.UnityAgent.Editor.UI
                 {
                     if (entry.toolStatus == ToolCallStatus.Error)
                     {
-                        var errLabel = new Label(entry.toolResult);
-                        errLabel.style.fontSize = 12;
-                        errLabel.style.color = theme.Error.a > 0.1f ? theme.Error : new Color(0.95f, 0.5f, 0.5f, 1f);
-                        errLabel.style.whiteSpace = WhiteSpace.Normal;
-                        errLabel.selection.isSelectable = true;
-                        resultContainer.Add(errLabel);
+                        var errColor = theme.Error.a > 0.1f ? theme.Error : new Color(0.95f, 0.5f, 0.5f, 1f);
+                        resultContainer.Add(LongText.Build(entry.toolResult, l =>
+                        {
+                            l.style.fontSize = 12;
+                            l.style.color = errColor;
+                            l.style.whiteSpace = WhiteSpace.Normal;
+                            l.selection.isSelectable = true;
+                        }));
                     }
                     else
                     {
