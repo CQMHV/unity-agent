@@ -71,8 +71,11 @@ namespace AjisaiFlow.UnityAgent.Editor.MCP
             if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            return System.Net.IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address)
-                && System.Net.IPAddress.IsLoopback(address);
+            if (!System.Net.IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address))
+                return false;
+            if (address.IsIPv4MappedToIPv6)
+                address = address.MapToIPv4();
+            return System.Net.IPAddress.IsLoopback(address);
         }
 
         public static string GetCorsAllowOriginValue(string originHeader)
