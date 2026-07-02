@@ -67,6 +67,7 @@ namespace AjisaiFlow.UnityAgent.Editor.Tests
             Assert.IsTrue(MCPHttpProtocol.IsAllowedOrigin("http://localhost:3000"));
             Assert.IsTrue(MCPHttpProtocol.IsAllowedOrigin("http://localhost:3000/"));
             Assert.IsTrue(MCPHttpProtocol.IsAllowedOrigin("https://127.0.0.1:3000"));
+            Assert.IsTrue(MCPHttpProtocol.IsAllowedOrigin("http://127.0.0.2:3000"));
             Assert.IsTrue(MCPHttpProtocol.IsAllowedOrigin("http://[::1]:3000"));
             Assert.IsFalse(MCPHttpProtocol.IsAllowedOrigin("https://example.com"));
             Assert.IsFalse(MCPHttpProtocol.IsAllowedOrigin("null"));

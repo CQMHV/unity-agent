@@ -545,12 +545,12 @@ func validOriginHeader(header string) bool {
 	if !strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https") {
 		return false
 	}
-	switch strings.ToLower(u.Hostname()) {
-	case "localhost", "127.0.0.1", "::1":
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" {
 		return true
-	default:
-		return false
 	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func headerContainsMediaType(header, mediaType string) bool {

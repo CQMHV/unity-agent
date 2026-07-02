@@ -65,6 +65,9 @@ func TestValidOriginHeaderAllowsOnlyLoopbackOrigins(t *testing.T) {
 	if !validOriginHeader("https://127.0.0.1:3000") {
 		t.Fatal("127.0.0.1 origin should be allowed")
 	}
+	if !validOriginHeader("http://127.0.0.2:3000") {
+		t.Fatal("127.0.0.2 loopback origin should be allowed")
+	}
 	if !validOriginHeader("http://[::1]:3000") {
 		t.Fatal("IPv6 loopback origin should be allowed")
 	}
